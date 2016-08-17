@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.0)
+
 PROJECT(OpenSubdiv-Model-Fitting)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -26,8 +28,9 @@ INCLUDE_DIRECTORIES(${OSD_INCLUDE_DIRS})
 LINK_DIRECTORIES(${OSD_LIBRARY_DIRS})
 
 # Eigen
-set(CMAKE_PREFIX_PATH "C:/dev/eigen_pr/awf-install")
-find_package(Eigen3)
+SET(CMAKE_PREFIX_PATH "C:/dev/eigen_pr/awf-install")
+FIND_PACKAGE(Eigen3)
+# Point to Eigen directly, if developing Eigen at the same time SET(EIGEN3_INCLUDE_DIR "C:/dev/eigen_pr")
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
 
 IF(UNIX)
@@ -44,7 +47,3 @@ ADD_EXECUTABLE(Fit-Subdiv-to-3D-Points
 	)
 	
 TARGET_LINK_LIBRARIES(Fit-Subdiv-to-3D-Points ${OSD_LIB})
-
-ADD_EXECUTABLE(Test-Eigen-Sparse
-	main_test_eigen_sparse.cpp
-  )

@@ -27,3 +27,6 @@
 *.exe
 *.out
 *.app
+
+# Per-user exclusions
+awf-build/

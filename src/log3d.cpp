@@ -64,8 +64,12 @@ void log3d::canvas() {
         var canvas = document.getElementById("renderCanvas");
         var engine = new BABYLON.Engine(canvas, true);
 
-            var createScene = function () {
+        var createScene = function () {
             var scene = new BABYLON.Scene(engine);
+            var color = new BABYLON.Color3(1, 1, 1);
+            var material = new BABYLON.StandardMaterial("material", scene);
+	          material.diffuseColor = color;
+
         )";
 
   f << R"(
@@ -148,6 +152,7 @@ log3d::object_t log3d::newobj(std::string prefix)
 log3d::object_t log3d::CreateSphere(int subdivisions, double radius) {
   object_t name = newobj("sphere");
   f << "  var " << name << " = BABYLON.Mesh.CreateSphere(\"" << name << "\", " << subdivisions << ", " << radius << ", scene);\n";
+  f << "  " << name << ".material = material;\n";
   return name;
 }
 
@@ -240,14 +245,15 @@ void log3d::mesh(Eigen::Matrix3Xi const& triangle_indices, Matrix3X const& V)
     var normals = [];
     BABYLON.VertexData.ComputeNormals(positions, indices, normals);
 
-                      var vertexData = new BABYLON.VertexData();
+    var vertexData = new BABYLON.VertexData();
     vertexData.positions = positions;
     vertexData.indices = indices;
     vertexData.normals = normals;
     //vertexData.uvs = uvs;
 
-                      var polygon = new BABYLON.Mesh(name, scene);
+    var polygon = new BABYLON.Mesh(name, scene);
     vertexData.applyToMesh(polygon);
+    polygon.material = material;
   }
           )";
 }
@@ -262,10 +268,9 @@ void log3d::wiremesh(Eigen::MatrixXi const& faces, Matrix3X const& V)
     f << "/*var lines = */BABYLON.Mesh.CreateLines(\"" << obj << "_" << face << "\", [";
     for (int j = 0; j <= faces.rows(); j++) {
       int j0 = faces(j % faces.rows(), face);
-      std::cerr << "j0=" << j0 << std::endl;
       f << "  new BABYLON.Vector3(" << V(0, j0) << ", " << V(1, j0) << ", " << V(2, j0) << "),\n";
     }
-    f << "], scene);\n";
+    f << "], scene).color = color;\n";
   }
   f << "}\n";
 }
@@ -278,7 +283,7 @@ void log3d::lines(Matrix3X const& V, bool closed)
     int i = j % n;
     f << "  new BABYLON.Vector3(" << V(0, i) << ", " << V(1, i) << ", " << V(2, i) << "),\n";
   }
-  f << "], scene);\n";
+  f << "], scene).color = color;\n";
 }
 
 void log3d::star(Vector3 const & X)

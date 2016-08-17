@@ -99,9 +99,9 @@ struct Subdiv3D_Functor : Eigen::SparseFunctor<Scalar>
 
     // Fill Jacobian columns.  
     // 1. Derivatives wrt control vertices.
-    Eigen::TripletArray<Scalar> jvals(nPoints * 3 * 3);
-    for (int i = 0; i < dSdX.data.size(); ++i) {
-      auto const& triplet = dSdX.data[i];
+    Eigen::TripletArray<Scalar, typename JacobianType::Index> jvals(nPoints * 3 * 3);
+    for (int i = 0; i < dSdX.size(); ++i) {
+      auto const& triplet = dSdX[i];
       assert(0 <= triplet.row() && triplet.row() < nPoints);
       assert(0 <= triplet.col() && triplet.col() < x.nVertices());
       jvals.add(triplet.row() * 3 + 0, X_base + triplet.col() * 3 + 0, triplet.value());
@@ -430,7 +430,8 @@ int main()
   Functor functor(data, mesh);
 
   // Check Jacobian
-  for (float eps = 1e-7; eps < 1.1e-3; eps*=10) {
+  if (0)
+  for (float eps = 1e-8f; eps < 1.1e-3f; eps*=10.f) {
     NumericalDiff<Functor> fd{ functor, Functor::Scalar(eps) };
     Functor::JacobianType J;
     Functor::JacobianType J_fd;
@@ -449,28 +450,50 @@ int main()
   lm.setMaxfev(10);
 
   Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
+  log.color(0, 1, 0);
   logsubdivmesh(log, mesh, params.control_vertices);
 
   std::cerr << "Done: err = "<< lm.fnorm() <<"\n";
 
   // Now, on a refined mesh.
-  {
+  if (1) {
+    log.color(.5, .8, 0);
+
     MeshTopology mesh1;
     Matrix3X verts1;
     SubdivEvaluator evaluator(mesh);
     evaluator.generate_refined_mesh(params.control_vertices, 1, &mesh1, &verts1);
     
-    {log3d log2("log2.html");
-    log2.ArcRotateCamera();
-    log2.axes();
-    log2.wiremesh(mesh1.quads, verts1);
-    log2.wiremesh(mesh1.quads, verts1 * 100);
+    {
+      log3d log2("log2.html");
+      log2.ArcRotateCamera();
+      log2.axes();
+      log2.wiremesh(mesh1.quads, verts1);
     }
 
-    for (int i = 0; i < nDataPoints; ++i)
-      params.us[i].face *= 4;
-
     params.control_vertices = verts1;
+
+    // Initialize uvs.
+    {
+      // 1. Make a list of test points, e.g. centre point of each face
+      int nFaces = mesh1.num_faces();
+      Matrix3X test_points(3, nFaces);
+      std::vector<SurfacePoint> uvs{ size_t(nFaces),{ 0,{ 0.5, 0.5 } } };
+      for (int i = 0; i < nFaces; ++i)
+        uvs[i].face = i;
+
+      SubdivEvaluator evaluator(mesh1);
+      evaluator.evaluateSubdivSurface(params.control_vertices, uvs, &test_points);
+
+      for (int i = 0; i < nDataPoints; i++) {
+        // Closest test point
+        Eigen::Index test_pt_index;
+        (test_points.colwise() - data.col(i)).colwise().squaredNorm().minCoeff(&test_pt_index);
+        params.us[i] = uvs[test_pt_index];
+      }
+    }
+
+
     Functor functor1(data, mesh1);
 
     Eigen::LevenbergMarquardt< Functor > lm(functor1);
@@ -478,7 +501,7 @@ int main()
     lm.setMaxfev(40);
 
     Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
-    logsubdivmesh(log, mesh, params.control_vertices);
+    logsubdivmesh(log, mesh1, params.control_vertices);
 
     std::cerr << "Done: err = " << lm.fnorm() << "\n";
   }

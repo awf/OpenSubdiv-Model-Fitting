@@ -18,6 +18,14 @@ struct log3d {
   void ArcRotateCamera();
   void axes();
 
+  void color(float r, float g, float b) {
+    f << "color = new BABYLON.Color3(" << r << ", " << g << ", " << b << ");\n";
+    f << R"(
+    material = new BABYLON.StandardMaterial("material", scene);
+    material.diffuseColor = color;
+)";
+  }
+
   object_t CreateSphere(int subdivisions, double radius);
   object_t CreatePlane(double v);
 

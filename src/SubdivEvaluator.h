@@ -189,11 +189,12 @@ void SubdivEvaluator::generate_refined_mesh(Matrix3X const& vert_coords, int lev
   int nfaces = refLastLevel.GetNumFaces();
 
   // Print vertex positions
-  int firstOfLastVerts = refiner2->GetNumVerticesTotal() - nverts;
+  //int firstOfLastVerts = refiner2->GetNumVerticesTotal() - nverts;
+  // src -= nverts;
 
   verts_out->resize(3, nverts);
   for (int vert = 0; vert < nverts; ++vert)
-    verts_out->col(vert) = verts[firstOfLastVerts + vert].point;
+    verts_out->col(vert) = src[vert].point;
 
   // Print faces
   mesh_out->num_vertices = nverts;
@@ -313,8 +314,8 @@ void SubdivEvaluator::evaluateSubdivSurface(Matrix3X const& vert_coords,
   // Preallocate triplet vectors to max feasibly needed
 #define CLEAR(VAR)\
   if (VAR) {\
-    VAR->data.reserve(MAX_NUM_W*uv.size());\
-    VAR->data.resize(0);\
+    VAR->reserve(MAX_NUM_W*uv.size());\
+    VAR->resize(0);\
   }
   CLEAR(out_dSdX);
   CLEAR(out_dSudX);
