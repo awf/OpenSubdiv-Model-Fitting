@@ -1,3 +1,6 @@
+#define _wassert wassert_awf
+#include <cassert>
+
 #include <iostream>
 #include <iomanip>
 
@@ -118,10 +121,10 @@ int main() {
 	*/
 	// Load banana model
 	//PLYParser plyParse("sphere_quad.ply");
-	PLYParser plyParse("banana_quad_coarse.ply");
+	PLYParser plyParse("Z:/OpenSubdiv-Model-Fitting/build/Debug/banana_quad_coarse.ply");
 	plyParse.parse(PLYParser::Model::Quads);
 	// Get the user input image parameters
-	FPJParser fpjParse("projects/bananas.fpj");
+	FPJParser fpjParse("Z:/OpenSubdiv-Model-Fitting/build/Debug/projects/bananas.fpj");
 	fpjParse.parse();
 	// Prepare final 3d log
 	log3d log("log3d.html", "fit-subdiv-to-3d-points");

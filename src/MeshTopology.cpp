@@ -67,6 +67,8 @@ MeshTopology& MeshTopology::operator=(const MeshTopology& mesh) {
 		this->quads.col(i) << mesh.quads.col(i);
 	}
 	this->update_adjacencies();
+
+	return *this;
 }
 
 void MeshTopology::update_adjacencies() {

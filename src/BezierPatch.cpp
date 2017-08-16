@@ -48,7 +48,7 @@ Eigen::Vector2f BezierPatch::evaluateNormalAt(const float t, bool normalsLeft) {
 	if (normalsLeft) {
 		return Eigen::Vector2f(-tangent(1), tangent(0));
 	} else {
-		return Eigen::Vector2f(tangent(2), -tangent(1));
+		return Eigen::Vector2f(tangent(1), -tangent(0));
 	}
 }
 
@@ -57,7 +57,7 @@ Eigen::Vector2f BezierPatch::evaluateNormalAt(const Eigen::Vector2f &pt1, const 
 	if (normalsLeft) {
 		return Eigen::Vector2f(-tangent(1), tangent(0));
 	} else {
-		return Eigen::Vector2f(tangent(2), -tangent(1));
+		return Eigen::Vector2f(tangent(1), -tangent(0));
 	}
 }
 

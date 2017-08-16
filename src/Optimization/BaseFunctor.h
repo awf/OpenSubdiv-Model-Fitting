@@ -35,7 +35,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// And the optimization steps are computed using VectorType.
 	// For subdivs (see xx), the correspondences are of type (int, Vec2) while the updates are of type (Vec2).
 	// The interactions between InputType and VectorType are restricted to:
-	//   The Jacobian computation takes an InputType, and its worows must easily convert to VectorType
+	//   The Jacobian computation takes an InputType, and its rows must easily convert to VectorType
 	//   The increment_in_place operation takes InputType and StepType. 
 	typedef VectorX VectorType;
 
@@ -92,7 +92,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// And 
 	// J = [J1 J2];
 
-	// QR for J1 subblocks is 2x1
+	// QR for J1 subblocks is 3x2
 	typedef ColPivHouseholderQR<Matrix<Scalar, 3, 2> > DenseQRSolver3x2;
 
 	// QR for J1 is block diagonal
@@ -101,7 +101,13 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
 
-	// QR for J is concatenation of the above.
+	// QR for JPos is concatenation of the above.
+	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver_Pos;
+
+	// QR for JNormal is concatenation of the above.
+	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver_Norm;
+
+	// QR for JThinPlate is concatenation of the above.
 	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 
 	typedef SchurlikeQRSolver QRSolver;

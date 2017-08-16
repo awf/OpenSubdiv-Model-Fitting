@@ -1,5 +1,9 @@
 #include "SubdivEvaluator.h"
 
+SubdivEvaluator::SubdivEvaluator()
+	: patchTable(NULL), refiner2(NULL), nVertices(0), nRefinerVertices(0), nLocalPoints(0) {
+}
+
 SubdivEvaluator::SubdivEvaluator(SubdivEvaluator const& that) {
 	*this = that;
 }
@@ -9,9 +13,10 @@ SubdivEvaluator::~SubdivEvaluator() {
 		delete this->patchTable;
 	}
 
-	if (this->refiner2 != NULL) {
-		delete this->refiner2;
-	}
+// FixMe: Crashing if not commented!
+//	if (this->refiner2 != NULL) {
+//		delete this->refiner2;
+//	}
 }
 
 SubdivEvaluator::SubdivEvaluator(MeshTopology const& mesh) {

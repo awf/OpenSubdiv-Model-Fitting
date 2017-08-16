@@ -38,6 +38,7 @@ int PosNormRegFunctor::operator()(const InputType& x, ValueType& fvec) {
 	for (int i = 0; i < data_points.cols(); i++) {
 		fvec.segment(i * 3, 3) = (S.col(i) - data_points.col(i));
 	}
+
 	// Normals
 	Eigen::Index n_base = data_points.cols() * 3;
 	for (int i = 0; i < data_normals.cols(); i++) {
@@ -47,6 +48,7 @@ int PosNormRegFunctor::operator()(const InputType& x, ValueType& fvec) {
 
 		fvec.segment(n_base + i * 3, 3) = (normal - data_normals.col(i));
 	}
+
 	// Thin-plate energy
 	Eigen::Index tp_base = data_points.cols() * 3 + data_normals.cols() * 3;
 	float tpLambda = 1e-2;
@@ -122,7 +124,10 @@ int PosNormRegFunctor::df(const InputType& x, JacobianType& fjac) {
 		jvals.add(n_base + triplet.row() * 3 + 2, X_base + triplet.col() * 3 + 2, (1.0 / nnorm) * (dndz(2) - normal(2) * ndndz));
 
 
-		// Add to TP
+		// Add to TP;
+		jvals.add(tp_base, X_base + triplet.col() * 3 + 0, 1.0);
+		jvals.add(tp_base, X_base + triplet.col() * 3 + 1, 1.0);
+		jvals.add(tp_base, X_base + triplet.col() * 3 + 2, 1.0);
 
 	}
 
@@ -174,7 +179,7 @@ int PosNormRegFunctor::df(const InputType& x, JacobianType& fjac) {
 	}
 
 	// (..., ... + 3 + 3 + 1) for the rotation, translation and scale parameters
-	fjac.resize(3 * nPoints + 3 * nPoints, 2 * nPoints + 3 * x.nVertices() + 3 + 1);
+	fjac.resize(3 * nPoints + 3 * nPoints + 1, 2 * nPoints + 3 * x.nVertices() + 3 + 1);
 	fjac.setFromTriplets(jvals.begin(), jvals.end());
 	fjac.makeCompressed();
 

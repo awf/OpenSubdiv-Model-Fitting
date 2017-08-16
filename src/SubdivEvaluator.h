@@ -65,6 +65,7 @@ struct SubdivEvaluator {
 	static const int maxlevel = 3;
 	Far::TopologyRefiner * refiner2;
 	
+	SubdivEvaluator();
 	SubdivEvaluator(MeshTopology const& mesh);
 	SubdivEvaluator(SubdivEvaluator const& that);
 	~SubdivEvaluator();

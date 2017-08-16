@@ -32,5 +32,6 @@
 *_BUP*
 build/
 awf-build/
+Fit-Subdiv-to-3D-Points.dir/
 x64/
 *.ipch
