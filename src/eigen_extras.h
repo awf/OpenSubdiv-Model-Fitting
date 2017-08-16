@@ -1,10 +1,12 @@
-#pragma once
+#ifndef EIGEN_EXTRAS_H
+#define EIGEN_EXTRAS_H
 
 #include <Eigen/Eigen>
 
 typedef double Scalar;
 // Like the eigen typedefs, but using the Scalar template parameter
 typedef Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> MatrixXX;
+typedef Eigen::Matrix<Scalar, 4, Eigen::Dynamic> Matrix4X;
 typedef Eigen::Matrix<Scalar, 3, Eigen::Dynamic> Matrix3X;
 typedef Eigen::Matrix<Scalar, 2, Eigen::Dynamic> Matrix2X;
 typedef Eigen::Matrix<Scalar, 2, 2> Matrix22;
@@ -50,4 +52,6 @@ auto hcat(M1 const& A, M2 const& B)
   return out;
 }
 */
+
+#endif
 

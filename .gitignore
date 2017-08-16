@@ -29,4 +29,8 @@
 *.app
 
 # Per-user exclusions
+*_BUP*
+build/
 awf-build/
+x64/
+*.ipch

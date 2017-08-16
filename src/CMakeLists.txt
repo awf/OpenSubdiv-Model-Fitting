@@ -36,6 +36,9 @@ INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
 IF(UNIX)
     ADD_DEFINITIONS("-std=c++11")
 ENDIF()
+if(WIN32)
+	ADD_DEFINITIONS("-D_USE_MATH_DEFINES")
+ENDIF()
 
 #---------------------------------------------------------------
 #Set the projects

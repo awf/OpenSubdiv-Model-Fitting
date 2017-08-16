@@ -35,9 +35,11 @@ void log3d::head(std::string tag) {
         <!-- Babylon.js -->
         <script src="http://www.babylonjs.com/hand.minified-1.2.js"></script>
         <script src="http://www.babylonjs.com/cannon.js"></script>
-        <script src="http://www.babylonjs.com/oimo.js"></script>
-        <script src="http://www.babylonjs.com/babylon.js"></script>
-        <style>
+		<script src="http://lo-th.github.io/Oimo.js/build/oimo.min.js"></script>
+		<script src="http://cdn.babylonjs.com/babylon.js"></script>
+		<script src="http://cdn.babylonjs.com/babylon.max.js"></script>
+		<script src="http://cdn.babylonjs.com/babylon.worker.js"></script>
+		<style>
             html, body {
                 overflow: hidden;
                 width: 100%;
