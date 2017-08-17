@@ -2,16 +2,22 @@
 
 #include <iostream>
 
-BaseFunctor::BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, const Matrix3X& data_points, const MeshTopology& mesh) :
+template <int BlkRows, int BlkCols>
+BaseFunctor<BlkRows, BlkCols>::BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, Eigen::Index numJacobianNonzeros, const Matrix3X& data_points, const MeshTopology& mesh) :
 	Base(numParameters, numResiduals),                        
 	data_points(data_points),
 	mesh(mesh),
-	evaluator(mesh) {
+	evaluator(mesh),
+	numParameters(numParameters),
+	numResiduals(numResiduals),
+	numJacobianNonzeros(numJacobianNonzeros),
+	rowStride(BlkRows) {
 
 	initWorkspace();
 }
 
-void BaseFunctor::initWorkspace() {
+template <int BlkRows, int BlkCols>
+void BaseFunctor<BlkRows, BlkCols>::initWorkspace() {
 	Index nPoints = data_points.cols();
 	S.resize(3, nPoints);
 	dSdu.resize(3, nPoints);
@@ -21,7 +27,8 @@ void BaseFunctor::initWorkspace() {
 	dSdvv.resize(3, nPoints);
 }
 // "Mesh walking" to update correspondences, as in Fig 3, Taylor et al, CVPR 2014, "Hand shape.."
-int BaseFunctor::increment_u_crossing_edges(Matrix3X const& X, int face, const Vector2& u, const Vector2& du, int* new_face_out, Vector2* new_u_out) {
+template <int BlkRows, int BlkCols>
+int BaseFunctor<BlkRows, BlkCols>::increment_u_crossing_edges(Matrix3X const& X, int face, const Vector2& u, const Vector2& du, int* new_face_out, Vector2* new_u_out) {
 	const int MAX_HOPS = 7;
 
 	Scalar u1_old = u[0];
@@ -149,7 +156,8 @@ int BaseFunctor::increment_u_crossing_edges(Matrix3X const& X, int face, const V
 	}
 }
 
-Scalar BaseFunctor::estimateNorm(InputType const& x, StepType const& diag)
+template <int BlkRows, int BlkCols>
+Scalar BaseFunctor<BlkRows, BlkCols>::estimateNorm(InputType const& x, StepType const& diag)
 {
 	Index nVertices = x.nVertices();
 	Map<VectorX> xtop{ (Scalar*)x.control_vertices.data(), nVertices * 3 };
@@ -164,9 +172,42 @@ Scalar BaseFunctor::estimateNorm(InputType const& x, StepType const& diag)
 }
 
 // And tell the algorithm how to set the QR parameters.
-void BaseFunctor::initQRSolver(SchurlikeQRSolver &qr) {
+template <int BlkRows, int BlkCols>
+void BaseFunctor<BlkRows, BlkCols>::initQRSolver(SchurlikeQRSolver &qr) {
 	// set block size
 	qr.setBlockParams(data_points.cols() * 2);
-	qr.getLeftSolver().setSparseBlockParams(3, 2);
+	qr.getLeftSolver().setSparseBlockParams(BlkRows, BlkCols);
 }
 
+// Functor functions
+// 1. Evaluate the residuals at x
+template <int BlkRows, int BlkCols>
+int BaseFunctor<BlkRows, BlkCols>::operator()(const InputType& x, ValueType& fvec) {
+	this->f_impl(x, fvec);
+
+	return 0;
+}
+
+// 2. Evaluate jacobian at x
+template <int BlkRows, int BlkCols>
+int BaseFunctor<BlkRows, BlkCols>::df(const InputType& x, JacobianType& fjac) {
+	// Fill Jacobian columns.  
+	Eigen::TripletArray<Scalar, typename JacobianType::Index> jvals(this->numJacobianNonzeros);
+
+	this->df_impl(x, jvals);
+
+	fjac.resize(this->numResiduals, this->numParameters);
+	fjac.setFromTriplets(jvals.begin(), jvals.end());
+	fjac.makeCompressed();
+
+	return 0;
+}
+
+template <int BlkRows, int BlkCols>
+void BaseFunctor<BlkRows, BlkCols>::increment_in_place(InputType* x, StepType const& p) {
+	Index nPoints = data_points.cols();
+	assert(p.size() == this->numParameters);
+	assert(x->us.size() == nPoints);
+
+	this->increment_in_place_impl(x, p);
+}

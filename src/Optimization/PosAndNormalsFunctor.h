@@ -3,7 +3,7 @@
 
 #include "BaseFunctor.h"
 
-struct PosAndNormalsFunctor : public BaseFunctor {
+struct PosAndNormalsFunctor : public BaseFunctor<6, 2> {
 	// Input normals
 	Matrix3X data_normals;
 
@@ -11,15 +11,13 @@ struct PosAndNormalsFunctor : public BaseFunctor {
 
 	// Functor functions
 	// 1. Evaluate the residuals at x
-	virtual int operator()(const InputType& x, ValueType& fvec);
+	virtual void f_impl(const InputType& x, ValueType& fvec);
 
 	// 2. Evaluate jacobian at x
-	virtual int df(const InputType& x, JacobianType& fjac);
+	virtual void df_impl(const InputType& x, Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals);
 
 	// Update function
-	virtual void increment_in_place(InputType* x, StepType const& p);
-
-	virtual void initQRSolver(SchurlikeQRSolver &qr);
+	virtual void increment_in_place_impl(InputType* x, StepType const& p);
 };
 
 #endif

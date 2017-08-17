@@ -19,6 +19,7 @@
 
 using namespace Eigen;
 
+template <int BlkRows, int BlkCols>
 struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	typedef Eigen::SparseFunctor<Scalar> Base;
 	typedef typename Base::JacobianType JacobianType;
@@ -40,17 +41,20 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	typedef VectorX VectorType;
 
 	// Functor constructor
-	BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, const Matrix3X& data_points, const MeshTopology& mesh);
+	BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, Eigen::Index numJacobianNonzeros, const Matrix3X& data_points, const MeshTopology& mesh);
 
 	// Functor functions
 	// 1. Evaluate the residuals at x
-	virtual int operator()(const InputType& x, ValueType& fvec) = 0;
+	int operator()(const InputType& x, ValueType& fvec);
+	virtual void f_impl(const InputType& x, ValueType& fvec) = 0;
 
 	// 2. Evaluate jacobian at x
-	virtual int df(const InputType& x, JacobianType& fjac) = 0;
+	int df(const InputType& x, JacobianType& fjac);
+	virtual void df_impl(const InputType& x, Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals) = 0;
 
 	// Update function
-	virtual void increment_in_place(InputType* x, StepType const& p) = 0;
+	void increment_in_place(InputType* x, StepType const& p);
+	virtual void increment_in_place_impl(InputType* x, StepType const& p) = 0;
 
 	// Input data
 	Matrix3X data_points;
@@ -68,7 +72,10 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	Matrix3X dSduu, dSduv, dSdvv;
 	SubdivEvaluator::triplets_t dSdX, dSudX, dSvdX;
 
-
+	const Index numParameters;
+	const Index numResiduals;
+	const Index numJacobianNonzeros;
+	const Index rowStride;
 
 	// Workspace initialization
 	virtual void initWorkspace();
@@ -92,11 +99,11 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// And 
 	// J = [J1 J2];
 
-	// QR for J1 subblocks is 3x2
-	typedef ColPivHouseholderQR<Matrix<Scalar, 3, 2> > DenseQRSolver3x2;
+	// QR for J1 for small subblocks
+	typedef ColPivHouseholderQR<Matrix<Scalar, BlkRows, BlkCols> > DenseQRSolverSmallBlock;
 
 	// QR for J1 is block diagonal
-	typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolver3x2> LeftSuperBlockSolver;
+	typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolverSmallBlock> LeftSuperBlockSolver;
 
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
@@ -114,6 +121,144 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 
 	// And tell the algorithm how to set the QR parameters.
 	virtual void initQRSolver(SchurlikeQRSolver &qr);
+
+
+	/************ ENERGIES, GRADIENTS and UPDATES ************/
+	void E_pos(const Matrix3X& S, const Matrix3X& data_points, const RigidTransform& rigidTransf, ValueType& fvec, const Eigen::Index rowOffset) {
+		for (int i = 0; i < data_points.cols(); i++) {
+			fvec.segment(i * this->rowStride + rowOffset, 3) = (S.col(i) - data_points.col(i));
+		}
+	}
+
+	void E_normal(const Matrix3X& dSdu, const Matrix3X& dSdv, const Matrix3X& data_normals, const RigidTransform& rigidTransf, ValueType& fvec, const Eigen::Index rowOffset) {
+		for (int i = 0; i < data_normals.cols(); i++) {
+			// Compute normal from the first derivatives of the subdivision surface
+			Vector3 normal = dSdu.col(i).cross(dSdv.col(i));
+			normal.normalize();
+
+			fvec.segment(i * this->rowStride + rowOffset, 3) = (normal - data_normals.col(i));
+		}
+	}
+
+	void dE_pos_d_X(const SubdivEvaluator::triplets_t &dSdX, const RigidTransform& rigidTransf,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		
+		// Get the rotation as quaternion and then convert to matrix
+		float lambda = rigidTransf.params().s1;
+
+		for (int i = 0; i < dSdX.size(); ++i) {
+			auto const& triplet = dSdX[i];
+			assert(0 <= triplet.row() && triplet.row() < data_points.cols());
+			assert(0 <= triplet.col() && triplet.col() < mesh.num_vertices);
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 0, lambda * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 1, lambda * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 2, lambda * triplet.value());
+		}
+	}
+
+	void dE_pos_d_uv(const Matrix3X& dSdu, const Matrix3X& dSdv, const RigidTransform& rigidTransf,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::Index nPoints = data_points.cols();
+
+		// Get the rotation as quaternion and then convert to matrix
+		float lambda = rigidTransf.params().s1;
+
+		for (int i = 0; i < nPoints; i++) {
+			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, lambda * dSdu(0, i));
+			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, lambda * dSdu(1, i));
+			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, lambda * dSdu(2, i));
+			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, lambda * dSdv(0, i));
+			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, lambda * dSdv(1, i));
+			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, lambda * dSdv(2, i));
+		}
+	}
+
+	void dE_normal_d_X(const SubdivEvaluator::triplets_t &dSudX, const SubdivEvaluator::triplets_t &dSvdX, 
+		const Matrix3X& dSdu, const Matrix3X& dSdv, const RigidTransform& rigidTransf,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		for (int i = 0; i < dSudX.size(); ++i) {
+			// Normals
+			auto const& tripletSu = dSudX[i];
+			auto const& tripletSv = dSvdX[i];
+			Vector3 normal = dSdu.col(tripletSu.row()).cross(dSdv.col(tripletSu.row()));
+			float nnorm = normal.norm();
+			normal.normalize();
+
+			Vector3 dndx, dndy, dndz;
+			dndx << 0.0f, dSdu(2, tripletSu.row()) * tripletSv.value() - dSdv(2, tripletSu.row()) * tripletSu.value(),
+				dSdv(1, tripletSu.row()) * tripletSu.value() - dSdu(1, tripletSu.row()) * tripletSv.value();
+			dndy << dSdv(2, tripletSu.row()) * tripletSu.value() - dSdu(2, tripletSu.row()) * tripletSv.value(),
+				0.0f,
+				dSdu(0, tripletSu.row()) * tripletSv.value() - dSdv(0, tripletSu.row()) * tripletSu.value();
+			dndz << dSdu(1, tripletSu.row()) * tripletSv.value() - dSdv(1, tripletSu.row()) * tripletSu.value(),
+				dSdv(0, tripletSu.row()) * tripletSu.value() - dSdu(0, tripletSu.row()) * tripletSv.value(),
+				0.0f;
+			float ndndx = normal.transpose() * dndx;
+			float ndndy = normal.transpose() * dndy;
+			float ndndz = normal.transpose() * dndz;
+
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 0, (1.0 / nnorm) * (dndx(0) - normal(0) * ndndx));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 0, (1.0 / nnorm) * (dndx(1) - normal(1) * ndndx));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 0, (1.0 / nnorm) * (dndx(2) - normal(2) * ndndx));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 1, (1.0 / nnorm) * (dndy(0) - normal(0) * ndndy));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 1, (1.0 / nnorm) * (dndy(1) - normal(1) * ndndy));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 1, (1.0 / nnorm) * (dndy(2) - normal(2) * ndndy));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 2, (1.0 / nnorm) * (dndz(0) - normal(0) * ndndz));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 2, (1.0 / nnorm) * (dndz(1) - normal(1) * ndndz));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 2, (1.0 / nnorm) * (dndz(2) - normal(2) * ndndz));
+		}
+	}
+
+	void dE_normal_d_uv(const Matrix3X& dSdu, const Matrix3X& dSdv, const Matrix3X& dSduu, const Matrix3X& dSduv, const Matrix3X& dSdvv, const RigidTransform& rigidTransf,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::Index nPoints = data_points.cols();
+		for (int i = 0; i < nPoints; i++) {
+			// Normals
+			Vector3 normal = dSdu.col(i).cross(dSdv.col(i));
+			float nnorm = normal.norm();
+			normal.normalize();
+
+			Vector3 dndu = dSduu.col(i).cross(dSdv.col(i)) + dSdu.col(i).cross(dSduv.col(i));
+			Vector3 dndv = dSduv.col(i).cross(dSdv.col(i)) + dSdu.col(i).cross(dSdvv.col(i));
+			float ndndu = normal.transpose() * dndu;
+			float ndndv = normal.transpose() * dndv;
+
+			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, (1.0 / nnorm) * (dndu(0) - normal(0) * ndndu));
+			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, (1.0 / nnorm) * (dndu(1) - normal(1) * ndndu));
+			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, (1.0 / nnorm) * (dndu(2) - normal(2) * ndndu));
+			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(0) - normal(0) * ndndv));
+			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(1) - normal(1) * ndndv));
+			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(2) - normal(2) * ndndv));
+		}
+	}
+
+	void inc_X(InputType* x, StepType const& p, const Eigen::Index colBase) {
+		Index nPoints = data_points.cols();
+
+		// Increment control vertices
+		Index nVertices = x->nVertices();
+
+		Map<VectorX>(x->control_vertices.data(), nVertices * 3) += p.segment(colBase, nVertices * 3);
+	}
+
+	void inc_uv(InputType* x, StepType const& p, const Eigen::Index colBase) {
+		Index nPoints = data_points.cols();
+
+		// Increment surface correspondences
+		int loopers = 0;
+		int totalhops = 0;
+		for (int i = 0; i < nPoints; ++i) {
+			Vector2 du = p.segment<2>(colBase + 2 * i);
+			int nhops = increment_u_crossing_edges(x->control_vertices, x->us[i].face, x->us[i].u, du, &x->us[i].face, &x->us[i].u);
+			if (nhops < 0)
+				++loopers;
+			totalhops += std::abs(nhops);
+		}
+		if (loopers > 0)
+			std::cerr << "[" << totalhops / Scalar(nPoints) << " hops, " << loopers << " points looped]";
+		else if (totalhops > 0)
+			std::cerr << "[" << totalhops << "/" << Scalar(nPoints) << " hops]";
+	}
 };
 
 #endif

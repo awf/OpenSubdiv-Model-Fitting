@@ -16,7 +16,8 @@
 
 #include "Optimization/PosOnlyFunctor.h"
 #include "Optimization/PosAndNormalsFunctor.h"
-#include "Optimization/PosNormRegFunctor.h"
+
+typedef PosOnlyFunctor OptimizationFunctor;
 
 using namespace Eigen;
 
@@ -42,7 +43,7 @@ void logsubdivmesh(log3d& log, MeshTopology const& mesh, Matrix3X const& vertice
 }
 
 // Initialize UVs to the middle of each face
-void initializeUVs(MeshTopology &mesh, BaseFunctor::InputType &params, const Matrix3X &data) {
+void initializeUVs(MeshTopology &mesh, OptimizationFunctor::InputType &params, const Matrix3X &data) {
 	int nFaces = int(mesh.quads.cols());
 	int nDataPoints = int(data.cols());
 
@@ -142,9 +143,11 @@ int main() {
 		//logb.position(logb.CreateSphere(0, 0.05), data(0, i), data(1, i), 0.0);
 		log.position(log.CreateSphere(0, 0.05), data(0, i), data(1, i), data(2, i));
 	}*/
-	
-	const unsigned int nParamVals = 11;
-	float t[nParamVals] = { 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 };
+
+	const unsigned int nParamVals = 3;
+	float t[nParamVals] = { 0.0, 0.5, 1.0 };
+	//const unsigned int nParamVals = 11;
+	//float t[nParamVals] = { 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 };
 	int nDataPoints = int(fpjParse.project().images[0].silhouettePoints[0].rows()) * nParamVals;
 	std::stringstream ss;
 	ss << "Number of data points: " << nDataPoints;
@@ -199,7 +202,7 @@ int main() {
 	makeCube(&mesh, &control_vertices_gt);	
 	
 	// INITIAL PARAMS
-	BaseFunctor::InputType params;
+	OptimizationFunctor::InputType params;
 	params.control_vertices = control_vertices_gt + 0.1 * MatrixXX::Random(3, control_vertices_gt.cols());
 	params.us.resize(nDataPoints);
 	//params.rigidTransf.setTranslation(fpjParse.project().images[0].rigidTransf.params().t1, 
@@ -248,16 +251,27 @@ int main() {
 	// Initialize uvs.
 	initializeUVs(mesh, params, data);
 	//logsubdivmesh(log, mesh, params.control_vertices);
+	
+	/*MeshTopology mesh1;
+	Matrix3X verts1;
+	SubdivEvaluator evaluator(mesh);
+	evaluator.generate_refined_mesh(params.control_vertices, 1, &mesh1, &verts1);
+	params.control_vertices = verts1;
+	initializeUVs(mesh1, params, data);
+	mesh = mesh1;*/
 
-	//typedef PosOnlyFunctor OptimizationFunctor;
-	//OptimizationFunctor functor(data, mesh);
+	OptimizationFunctor functor(data, mesh);
 	//typedef PosAndNormalsFunctor OptimizationFunctor;
 	//OptimizationFunctor functor(data, dataNormals, mesh);
-	typedef PosNormRegFunctor OptimizationFunctor;
-	OptimizationFunctor functor(data, dataNormals, mesh);
+	//typedef PosNormRegFunctor OptimizationFunctor;
+	//OptimizationFunctor functor(data, dataNormals, mesh);
+	//typedef ExperimentalFunctor OptimizationFunctor;
+	//OptimizationFunctor functor(data, dataNormals, mesh); 
+	//typedef ExperimentalFunctor2 OptimizationFunctor;
+	//OptimizationFunctor functor(data, mesh);
 
 	// Check Jacobian
-	if (1) {
+	if (0) {
 		std::cout << "Test Jacobian MODE" << std::endl;
 		for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
 			NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
@@ -271,8 +285,8 @@ int main() {
 				std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
 				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 374) - J_fd.toDense().block<560, 24>(561, 374)).norm() << std::endl;
 				std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
-				std::cout << "tp-xyz: " << (J.toDense().block<1, 24>(1122, 374) - J_fd.toDense().block<1, 24>(1122, 374)).norm() << std::endl;
-				std::cout << "tp-uv: " << (J.toDense().block<1, 374>(1122, 0) - J_fd.toDense().block<1, 374>(1122, 0)).norm() << std::endl;
+				//std::cout << "tp-xyz: " << (J.toDense().block<1, 24>(1122, 374) - J_fd.toDense().block<1, 24>(1122, 374)).norm() << std::endl;
+				//std::cout << "tp-uv: " << (J.toDense().block<1, 374>(1122, 0) - J_fd.toDense().block<1, 374>(1122, 0)).norm() << std::endl;
 
 				std::stringstream ss;
 				ss << "Jacobian diff(eps=" << eps << "), = " << diff;
@@ -303,63 +317,44 @@ int main() {
 	// Now, on a refined mesh.
 	const unsigned int numSteps = 3;
 	MeshTopology currMesh = mesh;
-	/*
-	for(int i = 0; i < numSteps; i++) {
-		MeshTopology mesh1;
-		Matrix3X verts1;
-		SubdivEvaluator evaluator(currMesh);
-		evaluator.generate_refined_mesh(params.control_vertices, (i < 2) ? 1 : 0, &mesh1, &verts1);
-
-		{
-			log3d log2("log2.html");
-			log2.ArcRotateCamera();
-			log2.axes();
-			log2.wiremesh(mesh1.quads, verts1);
-		}
-
-		params.control_vertices = verts1;
-		// Initialize uvs.
-		initializeUVs(mesh1, params, data);
-		OptimizationFunctor functor1(data, dataNormals, mesh1);
-		Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor1);
-		lm.setVerbose(true);
-		lm.setMaxfev(40);
-		Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
-
-		std::cerr << "Done: err = " << lm.fnorm() << "\n";
 	
-		currMesh = mesh1;
+	if (0) {
+		for (int i = 0; i < numSteps; i++) {
+			MeshTopology mesh1;
+			Matrix3X verts1;
+			SubdivEvaluator evaluator(currMesh);
+			evaluator.generate_refined_mesh(params.control_vertices, (i < 2) ? 1 : 0, &mesh1, &verts1);
 
-		if (lm.fnorm() < 1e-12) {
-			break;
+			{
+				log3d log2("log2.html");
+				log2.ArcRotateCamera();
+				log2.axes();
+				log2.wiremesh(mesh1.quads, verts1);
+			}
+
+			params.control_vertices = verts1;
+			// Initialize uvs.
+			initializeUVs(mesh1, params, data);
+			//OptimizationFunctor functor1(data, dataNormals, mesh1);
+			OptimizationFunctor functor1(data, mesh1);
+			Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor1);
+			lm.setVerbose(true);
+			lm.setMaxfev(40);
+			Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
+
+			std::cerr << "Done: err = " << lm.fnorm() << "\n";
+
+			currMesh = mesh1;
+
+			if (lm.fnorm() < 1e-12) {
+				break;
+			}
 		}
 	}
-	*/
+	
 	if (1) {
-		// Output result
-		Eigen::Vector3f v;
-		v << params.rigidTransf.params().r1, params.rigidTransf.params().r2, params.rigidTransf.params().r3;
-		Eigen::Vector4f q;
-		Eigen::Matrix4f R;
-		Eigen::MatrixXf dRdv = Eigen::MatrixXf::Zero(9, 3);
-		RigidTransform::rotationToQuaternion(v, q, &dRdv);
-		RigidTransform::quaternionToMatrix(q, R);
-		float lambda = params.rigidTransf.params().s1;
-		Eigen::Vector4f t;
-		t << params.rigidTransf.params().t1, params.rigidTransf.params().t2, params.rigidTransf.params().t3, 0.0;
-		// Rotate the control vertices
-		Matrix3X rCVs(3, params.nVertices());
-		for (int i = 0; i < params.nVertices(); i++) {
-			Eigen::Vector4f pt;
-			pt << params.control_vertices(0, i), params.control_vertices(1, i), params.control_vertices(2, i), 0.0f;
-			// The translation 't' zeroes out in the derivative, scale is added below
-			pt = t + lambda * (pt);
-			rCVs(0, i) = pt(0);
-			rCVs(1, i) = pt(1);
-			rCVs(2, i) = pt(2);
-		}
 		log.color(.5, .8, 0);
-		logsubdivmesh(log, currMesh, rCVs);
+		logsubdivmesh(log, currMesh, params.control_vertices);
 		//logsubdivmesh(log, mesh1, params.control_vertices);
 	}
 	

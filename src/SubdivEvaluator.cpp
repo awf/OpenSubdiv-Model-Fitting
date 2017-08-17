@@ -185,7 +185,7 @@ void SubdivEvaluator::evaluateSubdivSurface(Matrix3X const& vert_coords,
 	//--------------------------------------------------------------------------------------------------
 	Far::StencilTable const *stenciltab = patchTable->GetLocalPointStencilTable();
 	size_t  nstencils = stenciltab->GetNumStencils();
-	// printf("\n Num of stencils - %d", nstencils);
+	//printf("\n Num of stencils - %d\n", nstencils);
 	std::vector<Far::Stencil> st(nstencils);
 
 	for (size_t i = 0; i < nstencils; i++)
