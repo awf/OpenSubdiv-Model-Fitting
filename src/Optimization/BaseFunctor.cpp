@@ -1,3 +1,8 @@
+// Beause the file is being included by BaseFunctor.h
+#ifdef BASE_FUNCTOR_H
+#ifndef BASE_FUNCTOR_CPP
+#define BASE_FUNCTOR_CPP
+
 #include "BaseFunctor.h"
 
 #include <iostream>
@@ -211,3 +216,6 @@ void BaseFunctor<BlkRows, BlkCols>::increment_in_place(InputType* x, StepType co
 
 	this->increment_in_place_impl(x, p);
 }
+
+#endif
+#endif

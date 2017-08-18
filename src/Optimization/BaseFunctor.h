@@ -261,5 +261,8 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	}
 };
 
+// Hack to be able to split template classes into .h and .cpp files
+#include "BaseFunctor.cpp"
+
 #endif
 
