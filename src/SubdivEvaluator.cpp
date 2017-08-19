@@ -244,6 +244,12 @@ void SubdivEvaluator::evaluateSubdivSurface(Matrix3X const& vert_coords,
 
 		// Locate the patch corresponding to the face ptex idx and (s,t)
 		Far::PatchTable::PatchHandle const * handle = patchmap.FindPatch(face, u, v);
+
+		// ToDo:
+		// Test - this could be used to retrieve indices of the 4x4 bicubic patch vertices
+		// => valuating subdivision surface at the control points we can easily arrive to 4x4 bicubic patch vertices for each control point
+		std::cout << patchTable->GetPatchVertices(*handle).size() << std::endl;
+		
 		assert(handle);
 
 		// Evaluate the patch weights, identify the CVs and compute the limit frame:

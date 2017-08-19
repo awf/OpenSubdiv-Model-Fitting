@@ -4,7 +4,7 @@
 
 PosOnlyFunctor::PosOnlyFunctor(const Matrix3X& data_points, const MeshTopology& mesh)
 	: BaseFunctor(mesh.num_vertices * 3 + data_points.cols() * 2,   /* number of parameters */
-		data_points.cols() * 3, /* number of residuals */
+		data_points.cols() * 3 + mesh.num_vertices * 3, /* number of residuals */
 		data_points.cols() * 3 + data_points.cols() * 6,	/* number of Jacobian nonzeros */
 		data_points,
 		mesh) {
@@ -17,6 +17,8 @@ void PosOnlyFunctor::f_impl(const InputType& x, ValueType& fvec) {
 	evaluator.evaluateSubdivSurface(x.control_vertices, x.us, &S, &dSdX, &dSudX, &dSvdX, &dSdu, &dSdv, &dSduu, &dSduv, &dSdvv);
 
 	this->E_pos(S, data_points, x.rigidTransf, fvec, 0);
+
+	this->E_thinplate(x, x.rigidTransf, fvec, 0);
 }
 
 // 2. Evaluate jacobian at x

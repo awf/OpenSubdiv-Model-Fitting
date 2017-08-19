@@ -3,9 +3,9 @@
 #include <iostream>
 
 PosAndNormalsFunctor::PosAndNormalsFunctor(const Matrix3X& data_points, const Matrix3X &data_normals, const MeshTopology& mesh)
-	: BaseFunctor(mesh.num_vertices * 3 + data_points.cols() * 2 + 3 + 1,   /* number of parameters */
+	: BaseFunctor(mesh.num_vertices * 3 + data_points.cols() * 2,   /* number of parameters */
 		data_points.cols() * 3 + data_normals.cols() * 3, /* number of residuals */
-		data_points.cols() * 3 + data_points.cols() * 6 * 2 + data_points.cols() * 9,	/* number of Jacobian nonzeros */
+		data_points.cols() * 3 + data_points.cols() * 6 + data_points.cols() * 6 + data_points.cols() * 9,	/* number of Jacobian nonzeros */
 		data_points,
 		mesh),
 		data_normals(data_normals) {
