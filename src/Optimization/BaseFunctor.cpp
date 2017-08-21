@@ -31,6 +31,7 @@ void BaseFunctor<BlkRows, BlkCols>::initWorkspace() {
 	dSduv.resize(3, nPoints);
 	dSdvv.resize(3, nPoints);
 }
+
 // "Mesh walking" to update correspondences, as in Fig 3, Taylor et al, CVPR 2014, "Hand shape.."
 template <int BlkRows, int BlkCols>
 int BaseFunctor<BlkRows, BlkCols>::increment_u_crossing_edges(Matrix3X const& X, int face, const Vector2& u, const Vector2& du, int* new_face_out, Vector2* new_u_out) {

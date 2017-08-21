@@ -60,6 +60,7 @@ struct SubdivEvaluator {
 	size_t  nVertices;
 	size_t  nRefinerVertices;
 	size_t  nLocalPoints;
+	MatrixXX Q_thinplate;
 
 	mutable std::vector<OSD_Vertex> evaluation_verts_buffer;
 	static const int maxlevel = 3;
@@ -69,6 +70,8 @@ struct SubdivEvaluator {
 	SubdivEvaluator(MeshTopology const& mesh);
 	SubdivEvaluator(SubdivEvaluator const& that);
 	~SubdivEvaluator();
+
+	void initThinPlate();
 
 	void evaluateSubdivSurface(Matrix3X const& vert_coords,
 		std::vector<SurfacePoint> const& uv,
@@ -87,6 +90,10 @@ struct SubdivEvaluator {
 		Matrix3X* out_N = 0,
 		Matrix3X* out_Nu = 0,
 		Matrix3X* out_Nv = 0) const;
+
+	void thinPlateEnergy(Matrix3X const& vert_coords,
+		std::vector<SurfacePoint> const& uv,
+		MatrixXX &thinPlateEnergy) const;
 
 	void generate_refined_mesh(Matrix3X const& vert_coords, int levels, MeshTopology* mesh_out, Matrix3X* verts_out);
 

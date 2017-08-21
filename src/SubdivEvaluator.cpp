@@ -2,10 +2,14 @@
 
 SubdivEvaluator::SubdivEvaluator()
 	: patchTable(NULL), refiner2(NULL), nVertices(0), nRefinerVertices(0), nLocalPoints(0) {
+
+	this->initThinPlate();
 }
 
 SubdivEvaluator::SubdivEvaluator(SubdivEvaluator const& that) {
 	*this = that;
+
+	this->initThinPlate();
 }
 
 SubdivEvaluator::~SubdivEvaluator() {
@@ -20,6 +24,8 @@ SubdivEvaluator::~SubdivEvaluator() {
 }
 
 SubdivEvaluator::SubdivEvaluator(MeshTopology const& mesh) {
+	this->initThinPlate();
+
 	this->nVertices = mesh.num_vertices;
 	size_t num_faces = mesh.num_faces();
 
@@ -70,6 +76,27 @@ SubdivEvaluator::SubdivEvaluator(MeshTopology const& mesh) {
 
 	// Uniformly refine the topolgy up to 'maxlevel'
 	this->refiner2->RefineUniform(Far::TopologyRefiner::UniformOptions(this->maxlevel));
+}
+
+void SubdivEvaluator::initThinPlate() {
+	this->Q_thinplate = MatrixXX(16, 16);
+	this->Q_thinplate.row(0) << 2312, 3744, -1824, -32, 3744, -5682, -5328, 966, -1824, -5328, 6048, 1104, -32, 966, 1104, 62;
+	this->Q_thinplate.row(1) << 3744, 33528, 10752, -1824, -5682, -17904, -40386, -5328, -5328, -13536, 12816, 6048, 966, 10512, 10518, 1104;
+	this->Q_thinplate.row(2) << -1824, 10752, 33528, 3744, -5328, -40386, -17904, -5682, 6048, 12816, -13536, -5328, 1104, 10518, 10512, 966;
+	this->Q_thinplate.row(3) << -32, -1824, 3744, 2312, 966, -5328, -5682, 3744, 1104, 6048, -5328, -1824, 62, 1104, 966, -32;
+	this->Q_thinplate.row(4) << 3744, -5682, -5328, 966, 33528, -17904, -13536, 10512, 10752, -40386, 12816, 10518, -1824, -5328, 6048, 1104;
+	this->Q_thinplate.row(5) << -5682, -17904, -40386, -5328, -17904, 191112, -21072, -13536, -40386, -21072, -20658, 12816, -5328, -13536, 12816, 6048;
+	this->Q_thinplate.row(6) << -5328, -40386, -17904, -5682, -13536, -21072, 191112, -17904, 12816, -20658, -21072, -40386, 6048, 12816, -13536, -5328;
+	this->Q_thinplate.row(7) << 966, -5328, -5682, 3744, 10512, -13536, -17904, 33528, 10518, 12816, -40386, 10752, 1104, 6048, -5328, -1824;
+	this->Q_thinplate.row(8) << -1824, -5328, 6048, 1104, 10752, -40386, 12816, 10518, 33528, -17904, -13536, 10512, 3744, -5682, -5328, 966;
+	this->Q_thinplate.row(9) << -5328, -13536, 12816, 6048, -40386, -21072, -20658, 12816, -17904, 191112, -21072, -13536, -5682, -17904, -40386, -5328;
+	this->Q_thinplate.row(10) << 6048, 12816, -13536, -5328, 12816, -20658, -21072, -40386, -13536, -21072, 191112, -17904, -5328, -40386, -17904, -5682;
+	this->Q_thinplate.row(11) << 1104, 6048, -5328, -1824, 10518, 12816, -40386, 10752, 10512, -13536, -17904, 33528, 966, -5328, -5682, 3744;
+	this->Q_thinplate.row(12) << -32, 966, 1104, 62, -1824, -5328, 6048, 1104, 3744, -5682, -5328, 966, 2312, 3744, -1824, -32;
+	this->Q_thinplate.row(13) << 966, 10512, 10518, 1104, -5328, -13536, 12816, 6048, -5682, -17904, -40386, -5328, 3744, 33528, 10752, -1824;
+	this->Q_thinplate.row(14) << 1104, 10518, 10512, 966, 6048, 12816, -13536, -5328, -5328, -40386, -17904, -5682, -1824, 10752, 33528, 3744;
+	this->Q_thinplate.row(15) << 62, 1104, 966, -32, 1104, 6048, -5328, -1824, 966, -5328, -5682, 3744, -32, -1824, 3744, 2312;
+	this->Q_thinplate = this->Q_thinplate / 302400.0f;
 }
 
 void SubdivEvaluator::generate_refined_mesh(Matrix3X const& vert_coords, int levels, MeshTopology* mesh_out, Matrix3X* verts_out)
@@ -124,6 +151,69 @@ void SubdivEvaluator::generate_refined_mesh(Matrix3X const& vert_coords, int lev
 			mesh_out->quads(vert, face) = fverts[vert];
 	}
 	mesh_out->update_adjacencies();
+}
+
+void SubdivEvaluator::thinPlateEnergy(Matrix3X const& vert_coords,
+	std::vector<SurfacePoint> const& uv, 
+	MatrixXX &thinPlateEnergy) const {
+
+	// Check it's the same size vertex array
+	assert(vert_coords.cols() == nVertices);
+
+	// Then copy the coarse positions at the beginning from vert_coords
+	for (size_t i = 0; i < nVertices; ++i) {
+		evaluation_verts_buffer[i].point = vert_coords.col(i);
+	}
+	patchTable->ComputeLocalPointValues(&evaluation_verts_buffer[0], &evaluation_verts_buffer[nRefinerVertices]);
+
+	// Get stencils for local points
+	Far::StencilTable const *stenciltab = patchTable->GetLocalPointStencilTable();
+	size_t  nstencils = stenciltab->GetNumStencils();
+	std::vector<Far::Stencil> st(nstencils);
+
+	for (size_t i = 0; i < nstencils; i++) {
+		st[i] = stenciltab->GetStencil(Far::Index(i));
+	}
+
+	// Create a Far::PatchMap to help locating patches in the table
+	Far::PatchMap patchmap(*patchTable);
+
+	MatrixXX energyCoeff = MatrixXX::Zero(nVertices, nVertices);
+	// Evaluate the surface with parametric coordinates
+	for (unsigned int i = 0; i < uv.size(); ++i) {
+		int face = uv[i].face;
+		Scalar u = uv[i].u[0];
+		Scalar v = uv[i].u[1];
+
+		// Locate the patch corresponding to the face ptex idx and (s,t)
+		Far::PatchTable::PatchHandle const * handle = patchmap.FindPatch(face, u, v);
+		assert(handle);
+		
+		// ToDo:
+		// Test - this could be used to retrieve indices of the 4x4 bicubic patch vertices
+		// => evaluating subdivision surface at the control points we can easily arrive to 4x4 bicubic patch vertices for each control point
+		Far::ConstIndexArray patchVertices = patchTable->GetPatchVertices(*handle);
+		MatrixXX cv_Ws(16, 8);
+		for (unsigned int j = 0; j < MAX_NUM_W; j++) {
+			VectorX row = VectorX::Zero(8);
+			if (patchVertices[j] < nVertices) {
+				row(patchVertices[j]) = 1.0;
+			} else {
+				unsigned int st_idx = patchVertices[j] - nVertices;
+				Far::Index const *ind = st[st_idx].GetVertexIndices();
+				float const *wei = st[st_idx].GetWeights();
+				for (unsigned int k = 0; k < st[st_idx].GetSize(); k++) {
+					row(ind[k]) = wei[k];
+				}
+			}
+			cv_Ws.row(j) = row;
+		}
+		// Add to the energy
+		energyCoeff += (cv_Ws.transpose() * this->Q_thinplate * cv_Ws);
+	}
+
+	// Preserve matrix symmetricity
+	thinPlateEnergy = (energyCoeff + energyCoeff.transpose()) / 2.0;
 }
 
 void SubdivEvaluator::evaluateSubdivSurface(Matrix3X const& vert_coords,
@@ -188,8 +278,7 @@ void SubdivEvaluator::evaluateSubdivSurface(Matrix3X const& vert_coords,
 	//printf("\n Num of stencils - %d\n", nstencils);
 	std::vector<Far::Stencil> st(nstencils);
 
-	for (size_t i = 0; i < nstencils; i++)
-	{
+	for (size_t i = 0; i < nstencils; i++) {
 		st[i] = stenciltab->GetStencil(Far::Index(i));
 		if (0) {
 			unsigned int size_st = st[i].GetSize();
@@ -244,12 +333,6 @@ void SubdivEvaluator::evaluateSubdivSurface(Matrix3X const& vert_coords,
 
 		// Locate the patch corresponding to the face ptex idx and (s,t)
 		Far::PatchTable::PatchHandle const * handle = patchmap.FindPatch(face, u, v);
-
-		// ToDo:
-		// Test - this could be used to retrieve indices of the 4x4 bicubic patch vertices
-		// => valuating subdivision surface at the control points we can easily arrive to 4x4 bicubic patch vertices for each control point
-		std::cout << patchTable->GetPatchVertices(*handle).size() << std::endl;
-		
 		assert(handle);
 
 		// Evaluate the patch weights, identify the CVs and compute the limit frame:

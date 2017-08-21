@@ -143,7 +143,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	void E_thinplate(const InputType& x, const RigidTransform& rigidTransf, ValueType &fvec, const Eigen::Index rowOffset) {
 		/************************************************************************************************************/
 		/* Evaluate subdivision surface at the control points */
-		std::vector<SurfacePoint> us_cv;
+		std::vector<SurfacePoint> us_cv(x.control_vertices.cols());
 
 		// Assign face index and UV coordinate to each control vertex
 		int nFaces = int(mesh.quads.cols());
@@ -162,29 +162,32 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			us_cv[i] = uvs[test_pt_index];
 		}
 
-		// Now evaluate subdivision surface at USv corresponding to the control points
-		Matrix3X S_cv;
-		Matrix3X dSdu_cv, dSdv_cv;
-		Matrix3X dSduu_cv, dSduv_cv, dSdvv_cv;
-		evaluator.evaluateSubdivSurface(x.control_vertices, us_cv, &S_cv, 0, 0, 0, &dSdu_cv, &dSdv_cv, &dSduu_cv, &dSduv_cv, &dSdvv_cv);
+		// Retrieve bicubic patches around the control points of the subdivision surface
+		MatrixXX tpe;
+		evaluator.thinPlateEnergy(x.control_vertices, us_cv, tpe);
 		/************************************************************************************************************/
-
-		// The thin plate energy can be evaluated at each control vertex separately
-		// FixMe: Implement the correct integrated TP energy, this one doesn't correspond to the euqation from Tom's paper
-		/*std::cout << dSduu_cv.rows() << std::endl;
-		std::cout << dSduu_cv.cols() << std::endl;
-		for (int i = 0; i < x.control_vertices.cols(); i++) {
-			fvec.segment(rowOffset + i * 3, 3) = (dSduu_cv.col(i) + 2 * dSduv_cv.col(i) + dSdvv_cv.col(i));
-		}*/
+		
+		// The thin plate energy evaluated at each control vertex
+		tpe = tpe.sqrt() * x.control_vertices.transpose();
+		for (int i = 0; i < tpe.rows(); i++) {
+			//fvec(rowOffset + i) = tpe(i, 0);
+			//fvec(rowOffset + i + tpe.rows()) = tpe(i, 1);
+			//fvec(rowOffset + i + tpe.rows() * 2) = tpe(i, 2);
+			fvec(rowOffset + i * 3 + 0) = tpe(i, 0);
+			fvec(rowOffset + i * 3 + 1) = tpe(i, 1);
+			fvec(rowOffset + i * 3 + 2) = tpe(i, 2);
+			//fvec(rowOffset + i) = bicubicPatches[i].row(0) * this->Q_tp * bicubicPatches[i].row(0).transpose();
+			//fvec(rowOffset + i + bicubicPatches.size()) = bicubicPatches[i].row(1) * this->Q_tp * bicubicPatches[i].row(1).transpose();
+			//fvec(rowOffset + i + bicubicPatches.size() * 2) = bicubicPatches[i].row(2) * this->Q_tp * bicubicPatches[i].row(2).transpose();
+		}
 	}
 
 	void dE_pos_d_X(const SubdivEvaluator::triplets_t &dSdX, const RigidTransform& rigidTransf,
 		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
 		
 		// Get the rotation as quaternion and then convert to matrix
-		float lambda = rigidTransf.params().s1;
+		float lambda = 1.0; // rigidTransf.params().s1;
 
-		std::cout << dSdX.size() << std::endl;
 		for (int i = 0; i < dSdX.size(); ++i) {
 			auto const& triplet = dSdX[i];
 			assert(0 <= triplet.row() && triplet.row() < data_points.cols());
@@ -200,7 +203,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		Eigen::Index nPoints = data_points.cols();
 
 		// Get the rotation as quaternion and then convert to matrix
-		float lambda = rigidTransf.params().s1;
+		float lambda = 1.0; // rigidTransf.params().s1;
 
 		for (int i = 0; i < nPoints; i++) {
 			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, lambda * dSdu(0, i));
@@ -268,6 +271,45 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(0) - normal(0) * ndndv));
 			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(1) - normal(1) * ndndv));
 			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(2) - normal(2) * ndndv));
+		}
+	}
+
+	void dE_thinplate_d_X(const InputType& x, const RigidTransform& rigidTransf, 
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+
+		/************************************************************************************************************/
+		/* Evaluate subdivision surface at the control points */
+		std::vector<SurfacePoint> us_cv(x.control_vertices.cols());
+
+		// Assign face index and UV coordinate to each control vertex
+		int nFaces = int(mesh.quads.cols());
+
+		// 1. Make a list of test points, e.g. corner of each face
+		Matrix3X test_points(3, nFaces);
+		std::vector<SurfacePoint> uvs{ size_t(nFaces),{ 0,{ 0.0, 0.0 } } };
+		for (int i = 0; i < nFaces; ++i)
+			uvs[i].face = i;
+		evaluator.evaluateSubdivSurface(x.control_vertices, uvs, &test_points);
+
+		for (int i = 0; i < x.control_vertices.cols(); i++) {
+			// Closest test point
+			Eigen::Index test_pt_index;
+			(test_points.colwise() - x.control_vertices.col(i)).colwise().squaredNorm().minCoeff(&test_pt_index);
+			us_cv[i] = uvs[test_pt_index];
+		}
+
+		// Retrieve bicubic patches around the control points of the subdivision surface
+		MatrixXX tpe;
+		evaluator.thinPlateEnergy(x.control_vertices, us_cv, tpe);
+		tpe = tpe.sqrt();
+		/************************************************************************************************************/
+
+		// FixMe: Ignore the off-diagonal elements (leave them 0)
+		// Finite-difference derivatives would however compute some rather small off-diagonal values there
+		for (int i = 0; i < tpe.rows(); i++) {
+			jvals.add(rowOffset + i * 3 + 0, colBase + i * 3 + 0, tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 1, colBase + i * 3 + 1, tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 2, colBase + i * 3 + 2, tpe(i, i));
 		}
 	}
 

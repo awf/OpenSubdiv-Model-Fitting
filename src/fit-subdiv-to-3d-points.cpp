@@ -281,12 +281,24 @@ int main() {
 			fd.df(params, J_fd);
 			double diff = (J - J_fd).norm();
 			if (diff > 0) {
-				std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 374) - J_fd.toDense().block<560, 24>(0, 374)).norm() << std::endl;
-				std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
-				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 374) - J_fd.toDense().block<560, 24>(561, 374)).norm() << std::endl;
-				std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
+				//std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 374) - J_fd.toDense().block<560, 24>(0, 374)).norm() << std::endl;
+				//std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
+				//std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 374) - J_fd.toDense().block<560, 24>(561, 374)).norm() << std::endl;
+				//std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
 				//std::cout << "tp-xyz: " << (J.toDense().block<1, 24>(1122, 374) - J_fd.toDense().block<1, 24>(1122, 374)).norm() << std::endl;
 				//std::cout << "tp-uv: " << (J.toDense().block<1, 374>(1122, 0) - J_fd.toDense().block<1, 374>(1122, 0)).norm() << std::endl;
+				std::cout << "p-xyz: " << (J.toDense().block<153, 24>(0, 102) - J_fd.toDense().block<153, 24>(0, 102)).norm() << std::endl;
+				std::cout << "p-uv: " << (J.toDense().block<153, 102>(0, 0) - J_fd.toDense().block<153, 102>(0, 0)).norm() << std::endl;
+				std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(153, 102) - J_fd.toDense().block<24, 24>(153, 102)).norm() << std::endl;
+				std::cout << "tp-uv: " << (J.toDense().block<24, 102>(153, 0) - J_fd.toDense().block<24, 102>(153, 0)).norm() << std::endl;
+
+				std::ofstream ofs("tp-xyz_fd.csv");
+				ofs << J_fd.toDense().block<24, 24>(153, 102) << std::endl;
+				ofs.close();
+
+				std::ofstream ofs2("tp-xyz_my.csv");
+				ofs2 << J.toDense().block<24, 24>(153, 102) << std::endl;
+				ofs2.close();
 
 				std::stringstream ss;
 				ss << "Jacobian diff(eps=" << eps << "), = " << diff;
