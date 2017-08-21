@@ -4,7 +4,8 @@
 #include <Eigen/Eigen>
 #include <Eigen/SparseQR>
 
-#include "../eigen_extras.h"
+#include "../Eigen_ext/eigen_extras.h"
+#include "../Eigen_ext/BlockSparseQR_Ext.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -108,14 +109,8 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
 
-	// QR for JPos is concatenation of the above.
-	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver_Pos;
-
-	// QR for JNormal is concatenation of the above.
-	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver_Norm;
-
-	// QR for JThinPlate is concatenation of the above.
-	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
+	// QR solver is concatenation of the above.
+	typedef BlockSparseQR_Ext<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 
 	typedef SchurlikeQRSolver QRSolver;
 
@@ -173,9 +168,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			//fvec(rowOffset + i) = tpe(i, 0);
 			//fvec(rowOffset + i + tpe.rows()) = tpe(i, 1);
 			//fvec(rowOffset + i + tpe.rows() * 2) = tpe(i, 2);
-			fvec(rowOffset + i * 3 + 0) = tpe(i, 0);
-			fvec(rowOffset + i * 3 + 1) = tpe(i, 1);
-			fvec(rowOffset + i * 3 + 2) = tpe(i, 2);
+			fvec(rowOffset + i * 3 + 0) = 0.5 * tpe(i, 0);
+			fvec(rowOffset + i * 3 + 1) = 0.5 * tpe(i, 1);
+			fvec(rowOffset + i * 3 + 2) = 0.5 * tpe(i, 2);
 			//fvec(rowOffset + i) = bicubicPatches[i].row(0) * this->Q_tp * bicubicPatches[i].row(0).transpose();
 			//fvec(rowOffset + i + bicubicPatches.size()) = bicubicPatches[i].row(1) * this->Q_tp * bicubicPatches[i].row(1).transpose();
 			//fvec(rowOffset + i + bicubicPatches.size() * 2) = bicubicPatches[i].row(2) * this->Q_tp * bicubicPatches[i].row(2).transpose();
@@ -307,9 +302,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// FixMe: Ignore the off-diagonal elements (leave them 0)
 		// Finite-difference derivatives would however compute some rather small off-diagonal values there
 		for (int i = 0; i < tpe.rows(); i++) {
-			jvals.add(rowOffset + i * 3 + 0, colBase + i * 3 + 0, tpe(i, i));
-			jvals.add(rowOffset + i * 3 + 1, colBase + i * 3 + 1, tpe(i, i));
-			jvals.add(rowOffset + i * 3 + 2, colBase + i * 3 + 2, tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 0, colBase + i * 3 + 0, 0.5 * tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 1, colBase + i * 3 + 1, 0.5 * tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 2, colBase + i * 3 + 2, 0.5 * tpe(i, i));
 		}
 	}
 

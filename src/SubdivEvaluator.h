@@ -14,7 +14,7 @@
 #include <opensubdiv/far/ptexIndices.h>
 #include <opensubdiv/far/stencilTable.h>
 
-#include "eigen_extras.h"
+#include "Eigen_ext/eigen_extras.h"
 
 #include "MeshTopology.h"
 

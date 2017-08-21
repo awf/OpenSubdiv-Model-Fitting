@@ -1,7 +1,7 @@
 #pragma once
 
 #include <fstream>
-#include "eigen_extras.h"
+#include "Eigen_ext/eigen_extras.h"
 
 // Send 3D primitives to an HTML file, which can be viewed in a browser.
 struct log3d {

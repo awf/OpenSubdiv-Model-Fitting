@@ -1,7 +1,7 @@
 #ifndef MESH_TOPOLOGY_H
 #define MESH_TOPOLOGY_H
 
-#include "eigen_extras.h"
+#include "Eigen_ext/eigen_extras.h"
 #include "PLYParser.h"
 
 // Mesh topology

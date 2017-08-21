@@ -6,7 +6,7 @@
 #include <thread>
 #include <mutex>
 
-#include "eigen_extras.h"
+#include "Eigen_ext/eigen_extras.h"
 
 class Logger {
 public:
