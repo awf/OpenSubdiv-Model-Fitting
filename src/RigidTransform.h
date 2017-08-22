@@ -24,6 +24,15 @@ public:
 
 	RigidTransform() :
 		transfParams(Params()){
+
+		// Init translation mat
+		this->setTranslation(transfParams.t1, transfParams.t2, transfParams.t3);
+
+		// Init rotation mat
+		this->setRotation(transfParams.r1, transfParams.r2, transfParams.r3);
+
+		// Init scaling mat
+		this->setScaling(transfParams.s1, transfParams.s2, transfParams.s3);
 	}
 	RigidTransform(const float r1, const float r2, const float r3, const float t1, const float t2, const float t3, const float s1, const float s2, const float s3);
 	~RigidTransform();
@@ -35,6 +44,9 @@ public:
 	Eigen::Matrix4f translation() const;
 	Eigen::Matrix4f rotation() const;
 	Eigen::Matrix4f scaling() const;
+	Eigen::Vector3f rotationVec() const;
+	Eigen::Vector4f scalingVec() const;
+	Eigen::Vector4f translationVec() const;
 	Eigen::Matrix4f transformation() const;
 
 	RigidTransform::Params params() const;

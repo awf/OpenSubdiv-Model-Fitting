@@ -139,8 +139,20 @@ Eigen::Matrix4f RigidTransform::scaling() const {
 	return this->scalingMat;
 }
 
+Eigen::Vector3f RigidTransform::rotationVec() const {
+	return Eigen::Vector3f(this->transfParams.r1, this->transfParams.r2, this->transfParams.r3);
+}
+
+Eigen::Vector4f RigidTransform::scalingVec() const {
+	return Eigen::Vector4f(this->transfParams.s1, this->transfParams.s2, this->transfParams.s3, 1.0);
+}
+
+Eigen::Vector4f RigidTransform::translationVec() const {
+	return Eigen::Vector4f(this->transfParams.t1, this->transfParams.t2, this->transfParams.t3, 0.0);
+}
+
 Eigen::Matrix4f RigidTransform::transformation() const {
-	return this->translationMat * this->rotationMat * this->scalingMat;
+	return this->translationMat * this->scalingMat * this->rotationMat;
 }
 
 RigidTransform::Params RigidTransform::params() const {
