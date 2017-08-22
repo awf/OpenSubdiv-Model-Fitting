@@ -1,6 +1,7 @@
 #include "RigidTransform.h"
 
 #include <iostream>
+#include <Eigen/Geometry>
 
 RigidTransform::RigidTransform(const float r1, const float r2, const float r3, const float t1, const float t2, const float t3, const float s1, const float s2, const float s3) {
 	// Init translation mat
@@ -36,41 +37,45 @@ void RigidTransform::rotationToQuaternion(const Eigen::Vector3f &v, Eigen::Vecto
 	q << sincHalf * v, cos(vnorm / 2.0f);
 
 	// Compute dq/dv
-	Eigen::MatrixXf dqdv = Eigen::MatrixXf::Zero(4, 3);
-	dqdv.row(3) << -0.5f * v(0) * sincHalf, -0.5f * v(1) * sincHalf, -0.5f * v(2) * sincHalf;
-	// For numerical stability, use Taylor series approx. for vnorm < Eps^(1/4)
-	float mult = 0.0f;
-	if (vnorm < sqrt(sqrt(Eps))) {
-		mult = ((vnorm * vnorm) / 40.0f - 1.0f) / 24.0f;
-	} else {
-		mult = (cos(vnorm / 2.0f) / 2.0f - sincHalf) / (vnorm * vnorm);
+	if (dRdv) {
+		Eigen::MatrixXf dqdv = Eigen::MatrixXf::Zero(4, 3);
+		dqdv.row(3) << -0.5f * v(0) * sincHalf, -0.5f * v(1) * sincHalf, -0.5f * v(2) * sincHalf;
+		// For numerical stability, use Taylor series approx. for vnorm < Eps^(1/4)
+		float mult = 0.0f;
+		if (vnorm < sqrt(sqrt(Eps))) {
+			mult = ((vnorm * vnorm) / 40.0f - 1.0f) / 24.0f;
+		}
+		else {
+			mult = (cos(vnorm / 2.0f) / 2.0f - sincHalf) / (vnorm * vnorm);
+		}
+		dqdv.block<3, 3>(0, 0) << v(0) * v(0), v(0) * v(1), v(0) * v(2),
+			v(1) * v(0), v(1) * v(1), v(1) * v(2),
+			v(2) * v(0), v(2) * v(1), v(2) * v(2);
+		dqdv.block<3, 3>(0, 0) *= mult;
+		dqdv(0, 0) += sincHalf;
+		dqdv(1, 1) += sincHalf;
+		dqdv(2, 2) += sincHalf;
+
+		// Compute dR/dq
+		Eigen::MatrixXf dRdq = Eigen::MatrixXf::Zero(9, 4);
+		dRdq.row(0) << 0.0f, -2.0f * q(1), -2.0f * q(2), 0.0f;
+		dRdq.row(1) << q(1), q(0), q(3), q(2);
+		dRdq.row(2) << q(2), -q(3), q(0), -q(1);
+		dRdq.row(3) << q(1), q(0), -q(3), -q(2);
+		dRdq.row(4) << -2.0f * q(0), 0.0f, -2.0 * q(2), 0.0f;
+		dRdq.row(5) << q(3), q(2), q(1), q(0);
+		dRdq.row(6) << q(2), q(3), q(0), q(1);
+		dRdq.row(7) << -q(3), q(2), q(1), -q(0);
+		dRdq.row(8) << -2.0f * q(0), -2.0 * q(1), 0.0f, 0.0f;
+		dRdq *= 2.0f;
+
+		// Use Chain rule to compute dRdv as dRdq * dqdv
+		*dRdv = dRdq * dqdv;
 	}
-	dqdv.block<3, 3>(0, 0) << v(0) * v(0), v(0) * v(1), v(0) * v(2),
-		v(1) * v(0), v(1) * v(1), v(1) * v(2),
-		v(2) * v(0), v(2) * v(1), v(2) * v(2);
-	dqdv.block<3, 3>(0, 0) *= mult;
-	dqdv(0, 0) += sincHalf;
-	dqdv(1, 1) += sincHalf;
-	dqdv(2, 2) += sincHalf;
-
-	// Compute dR/dq
-	Eigen::MatrixXf dRdq = Eigen::MatrixXf::Zero(9, 4);
-	dRdq.row(0) << 0.0f, -2.0f * q(1), -2.0f * q(2), 0.0f;
-	dRdq.row(1) << q(1), q(0), q(3), q(2);
-	dRdq.row(2) << q(2), -q(3), q(0), -q(1);
-	dRdq.row(3) << q(1), q(1), -q(3), -q(2);
-	dRdq.row(4) << -2.0f * q(0), 0.0f, -2.0 * q(2), 0.0f;
-	dRdq.row(5) << q(3), q(2), q(1), q(0);
-	dRdq.row(6) << q(2), q(3), q(0), q(1);
-	dRdq.row(7) << -q(3), q(2), q(1), -q(0);
-	dRdq.row(8) << -2.0f * q(0), -2.0 * q(1), 0.0f, 0.0f;
-	dRdq *= 2.0f;
-
-	// Use Chain rule to compute dRdv as dRdq * dqdv
-	*dRdv = dRdq * dqdv;
 }
 
 void RigidTransform::quaternionToMatrix(const Eigen::Vector4f &q, Eigen::Matrix4f &R) {
+	/*
 	R = Eigen::Matrix4f::Zero();
 
 	float xy, xz, yz, wx, wy, wz, xx, yy, zz;
@@ -83,6 +88,20 @@ void RigidTransform::quaternionToMatrix(const Eigen::Vector4f &q, Eigen::Matrix4
 	R(2, 0) = (xz - wy); R(2, 1) = (yz + wx); R(2, 2) = 1.0f - (xx + yy);
 
 	R(3, 3) = 1.0f;
+	*/
+	
+	// Do the same as above but use Eigen (safer)
+	R = Eigen::Matrix4f::Identity();
+	Eigen::Quaternionf qq(q(3), q(0), q(1), q(2));
+	R.block<3, 3>(0, 0) = qq.toRotationMatrix();
+
+	/*
+	R = Eigen::Matrix4f::Identity();
+	Eigen::Matrix3f rm;
+	rm << 0, q(2), -q(1), 
+		-q(2), 0, q(0), 
+		q(1), -q(0), 0;
+	R.block<3, 3>(0, 0) = rm.exp();*/
 }
 
 void RigidTransform::setTranslation(const float t1, const float t2, const float t3) {
@@ -104,14 +123,20 @@ void RigidTransform::setRotation(const float r1, const float r2, const float r3)
 	this->transfParams.r2 = r2;
 	this->transfParams.r3 = r3;
 
+	Eigen::Vector3f v(r1, r2, r3);
+	Eigen::Vector4f q;
+	this->rotationToQuaternion(v, q);
+	this->quaternionToMatrix(q, this->rotationMat);
+	
 	// Update rotation matrix
 	// Store in terms of matrix exponential as in T. Cashman et al. "What shape are dolphins"...
-	Eigen::Matrix3f rm, mm;
+	/*
+	Eigen::Matrix3f rm;
 	rm << 0, -r3, r2,
 		r3, 0, -r1,
 		-r2, r1, 0;
 	this->rotationMat = Eigen::Matrix4f::Identity();
-	this->rotationMat.block<3, 3>(0, 0) = rm.exp();
+	this->rotationMat.block<3, 3>(0, 0) = rm.exp();*/
 }
 
 void RigidTransform::setScaling(const float s1, const float s2, const float s3) {

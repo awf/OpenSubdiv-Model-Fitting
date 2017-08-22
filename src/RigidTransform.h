@@ -19,7 +19,7 @@ public:
 		}
 	};
 
-	static void rotationToQuaternion(const Eigen::Vector3f &v, Eigen::Vector4f &q, Eigen::MatrixXf *dRdv);
+	static void rotationToQuaternion(const Eigen::Vector3f &v, Eigen::Vector4f &q, Eigen::MatrixXf *dRdv = 0);
 	static void quaternionToMatrix(const Eigen::Vector4f &q, Eigen::Matrix4f &R);
 
 	RigidTransform() :
