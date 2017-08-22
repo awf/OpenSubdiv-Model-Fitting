@@ -22,7 +22,7 @@ void PosAndNormalsWithRegFunctor::f_impl(const InputType& x, ValueType& fvec) {
 
 	this->E_pos(S, data_points, x.rigidTransf, fvec, 0);
 
-	this->E_normal(dSdu, dSdv, data_normals, x.rigidTransf, fvec, 0);
+	this->E_normal(dSdu, dSdv, data_normals, x.rigidTransf, fvec, 3);
 
 	this->E_thinplate(x, x.rigidTransf, fvec, data_points.cols() * 3 + data_normals.cols() * 3);
 }
