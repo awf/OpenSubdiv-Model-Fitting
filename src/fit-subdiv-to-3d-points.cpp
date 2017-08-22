@@ -16,8 +16,10 @@
 
 #include "Optimization/PosOnlyFunctor.h"
 #include "Optimization/PosAndNormalsFunctor.h"
+#include "Optimization/PosAndNormalsWithRegFunctor.h"
 
-typedef PosOnlyFunctor OptimizationFunctor;
+//typedef PosOnlyFunctor OptimizationFunctor;
+typedef PosAndNormalsWithRegFunctor OptimizationFunctor;
 
 using namespace Eigen;
 
@@ -260,7 +262,8 @@ int main() {
 	initializeUVs(mesh1, params, data);
 	mesh = mesh1;*/
 
-	OptimizationFunctor functor(data, mesh);
+	//OptimizationFunctor functor(data, mesh);
+	OptimizationFunctor functor(data, dataNormals, mesh);
 	//typedef PosAndNormalsFunctor OptimizationFunctor;
 	//OptimizationFunctor functor(data, dataNormals, mesh);
 	//typedef PosNormRegFunctor OptimizationFunctor;
@@ -347,8 +350,8 @@ int main() {
 			params.control_vertices = verts1;
 			// Initialize uvs.
 			initializeUVs(mesh1, params, data);
-			//OptimizationFunctor functor1(data, dataNormals, mesh1);
-			OptimizationFunctor functor1(data, mesh1);
+			OptimizationFunctor functor1(data, dataNormals, mesh1);
+			//OptimizationFunctor functor1(data, mesh1);
 			Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor1);
 			lm.setVerbose(true);
 			lm.setMaxfev(40);

@@ -78,6 +78,16 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	const Index numJacobianNonzeros;
 	const Index rowStride;
 
+	// Weighting parameters for the energy terms (where needed)
+	struct EnergyWeights {
+		double thinplate;	// Weight for the thin plate energy
+	
+		EnergyWeights() 
+			: thinplate(1.0) {
+		}
+	};
+	EnergyWeights eWeights;
+
 	// Workspace initialization
 	virtual void initWorkspace();
 
@@ -117,26 +127,8 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// And tell the algorithm how to set the QR parameters.
 	virtual void initQRSolver(SchurlikeQRSolver &qr);
 
-
-	/************ ENERGIES, GRADIENTS and UPDATES ************/
-	void E_pos(const Matrix3X& S, const Matrix3X& data_points, const RigidTransform& rigidTransf, ValueType& fvec, const Eigen::Index rowOffset) {
-		for (int i = 0; i < data_points.cols(); i++) {
-			fvec.segment(i * this->rowStride + rowOffset, 3) = (S.col(i) - data_points.col(i));
-		}
-	}
-
-	void E_normal(const Matrix3X& dSdu, const Matrix3X& dSdv, const Matrix3X& data_normals, const RigidTransform& rigidTransf, ValueType& fvec, const Eigen::Index rowOffset) {
-		for (int i = 0; i < data_normals.cols(); i++) {
-			// Compute normal from the first derivatives of the subdivision surface
-			Vector3 normal = dSdu.col(i).cross(dSdv.col(i));
-			normal.normalize();
-
-			fvec.segment(i * this->rowStride + rowOffset, 3) = (normal - data_normals.col(i));
-		}
-	}
-	
-	void E_thinplate(const InputType& x, const RigidTransform& rigidTransf, ValueType &fvec, const Eigen::Index rowOffset) {
-		/************************************************************************************************************/
+	/************ UTILITY FUNCTIONS FOR ENERGIES ************/
+	void computeThinPlateMatrix(const InputType& x, MatrixXX &tpe) {
 		/* Evaluate subdivision surface at the control points */
 		std::vector<SurfacePoint> us_cv(x.control_vertices.cols());
 
@@ -158,22 +150,37 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		}
 
 		// Retrieve bicubic patches around the control points of the subdivision surface
-		MatrixXX tpe;
 		evaluator.thinPlateEnergy(x.control_vertices, us_cv, tpe);
-		/************************************************************************************************************/
+	}
+
+	/************ ENERGIES, GRADIENTS and UPDATES ************/
+	void E_pos(const Matrix3X& S, const Matrix3X& data_points, const RigidTransform& rigidTransf, ValueType& fvec, const Eigen::Index rowOffset) {
+		for (int i = 0; i < data_points.cols(); i++) {
+			fvec.segment(i * this->rowStride + rowOffset, 3) = (S.col(i) - data_points.col(i));
+		}
+	}
+
+	void E_normal(const Matrix3X& dSdu, const Matrix3X& dSdv, const Matrix3X& data_normals, const RigidTransform& rigidTransf, ValueType& fvec, const Eigen::Index rowOffset) {
+		for (int i = 0; i < data_normals.cols(); i++) {
+			// Compute normal from the first derivatives of the subdivision surface
+			Vector3 normal = dSdu.col(i).cross(dSdv.col(i));
+			normal.normalize();
+
+			fvec.segment(i * this->rowStride + rowOffset, 3) = (normal - data_normals.col(i));
+		}
+	}
+	
+	void E_thinplate(const InputType& x, const RigidTransform& rigidTransf, ValueType &fvec, const Eigen::Index rowOffset) {
+		// Compute thin plate energy matrix
+		MatrixXX tpe;
+		this->computeThinPlateMatrix(x, tpe);
 		
 		// The thin plate energy evaluated at each control vertex
 		tpe = tpe.sqrt() * x.control_vertices.transpose();
 		for (int i = 0; i < tpe.rows(); i++) {
-			//fvec(rowOffset + i) = tpe(i, 0);
-			//fvec(rowOffset + i + tpe.rows()) = tpe(i, 1);
-			//fvec(rowOffset + i + tpe.rows() * 2) = tpe(i, 2);
-			fvec(rowOffset + i * 3 + 0) = 0.5 * tpe(i, 0);
-			fvec(rowOffset + i * 3 + 1) = 0.5 * tpe(i, 1);
-			fvec(rowOffset + i * 3 + 2) = 0.5 * tpe(i, 2);
-			//fvec(rowOffset + i) = bicubicPatches[i].row(0) * this->Q_tp * bicubicPatches[i].row(0).transpose();
-			//fvec(rowOffset + i + bicubicPatches.size()) = bicubicPatches[i].row(1) * this->Q_tp * bicubicPatches[i].row(1).transpose();
-			//fvec(rowOffset + i + bicubicPatches.size() * 2) = bicubicPatches[i].row(2) * this->Q_tp * bicubicPatches[i].row(2).transpose();
+			fvec(rowOffset + i * 3 + 0) = this->eWeights.thinplate * tpe(i, 0);
+			fvec(rowOffset + i * 3 + 1) = this->eWeights.thinplate * tpe(i, 1);
+			fvec(rowOffset + i * 3 + 2) = this->eWeights.thinplate * tpe(i, 2);
 		}
 	}
 
@@ -272,39 +279,17 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	void dE_thinplate_d_X(const InputType& x, const RigidTransform& rigidTransf, 
 		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
 
-		/************************************************************************************************************/
-		/* Evaluate subdivision surface at the control points */
-		std::vector<SurfacePoint> us_cv(x.control_vertices.cols());
-
-		// Assign face index and UV coordinate to each control vertex
-		int nFaces = int(mesh.quads.cols());
-
-		// 1. Make a list of test points, e.g. corner of each face
-		Matrix3X test_points(3, nFaces);
-		std::vector<SurfacePoint> uvs{ size_t(nFaces),{ 0,{ 0.0, 0.0 } } };
-		for (int i = 0; i < nFaces; ++i)
-			uvs[i].face = i;
-		evaluator.evaluateSubdivSurface(x.control_vertices, uvs, &test_points);
-
-		for (int i = 0; i < x.control_vertices.cols(); i++) {
-			// Closest test point
-			Eigen::Index test_pt_index;
-			(test_points.colwise() - x.control_vertices.col(i)).colwise().squaredNorm().minCoeff(&test_pt_index);
-			us_cv[i] = uvs[test_pt_index];
-		}
-
-		// Retrieve bicubic patches around the control points of the subdivision surface
+		// Compute thin plate energy matrix
 		MatrixXX tpe;
-		evaluator.thinPlateEnergy(x.control_vertices, us_cv, tpe);
-		tpe = tpe.sqrt();
-		/************************************************************************************************************/
-
+		this->computeThinPlateMatrix(x, tpe);
+		
 		// FixMe: Ignore the off-diagonal elements (leave them 0)
 		// Finite-difference derivatives would however compute some rather small off-diagonal values there
+		tpe = tpe.sqrt();
 		for (int i = 0; i < tpe.rows(); i++) {
-			jvals.add(rowOffset + i * 3 + 0, colBase + i * 3 + 0, 0.5 * tpe(i, i));
-			jvals.add(rowOffset + i * 3 + 1, colBase + i * 3 + 1, 0.5 * tpe(i, i));
-			jvals.add(rowOffset + i * 3 + 2, colBase + i * 3 + 2, 0.5 * tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 0, colBase + i * 3 + 0, this->eWeights.thinplate * tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 1, colBase + i * 3 + 1, this->eWeights.thinplate * tpe(i, i));
+			jvals.add(rowOffset + i * 3 + 2, colBase + i * 3 + 2, this->eWeights.thinplate * tpe(i, i));
 		}
 	}
 
