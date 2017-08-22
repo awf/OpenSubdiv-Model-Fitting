@@ -24,12 +24,10 @@ BaseFunctor<BlkRows, BlkCols>::BaseFunctor(Eigen::Index numParameters, Eigen::In
 template <int BlkRows, int BlkCols>
 void BaseFunctor<BlkRows, BlkCols>::initWorkspace() {
 	Index nPoints = data_points.cols();
-	S.resize(3, nPoints);
-	dSdu.resize(3, nPoints);
-	dSdv.resize(3, nPoints);
-	dSduu.resize(3, nPoints);
-	dSduv.resize(3, nPoints);
-	dSdvv.resize(3, nPoints);
+	this->ssurf.init(nPoints);
+	this->ssurf_tsr.init(nPoints);
+	this->ssurf_sr.init(nPoints);
+	this->ssurf_r.init(nPoints);
 }
 
 // "Mesh walking" to update correspondences, as in Fig 3, Taylor et al, CVPR 2014, "Hand shape.."
@@ -189,6 +187,12 @@ void BaseFunctor<BlkRows, BlkCols>::initQRSolver(SchurlikeQRSolver &qr) {
 // 1. Evaluate the residuals at x
 template <int BlkRows, int BlkCols>
 int BaseFunctor<BlkRows, BlkCols>::operator()(const InputType& x, ValueType& fvec) {
+	// Update subdivison surfaces
+	this->ssurf_tsr.update = true;
+	this->ssurf_sr.update = true;
+	this->ssurf_r.update = true;
+	this->ssurf.update = true;
+
 	this->f_impl(x, fvec);
 
 	return 0;

@@ -15,10 +15,13 @@
 #include "RigidTransform.h"
 
 #include "Optimization/PosOnlyFunctor.h"
+#include "Optimization/PosOnlyWithRegFunctor.h"
 #include "Optimization/PosAndNormalsFunctor.h"
 #include "Optimization/PosAndNormalsWithRegFunctor.h"
 
 //typedef PosOnlyFunctor OptimizationFunctor;
+//typedef PosOnlyWithRegFunctor OptimizationFunctor;
+//typedef PosAndNormalsFunctor OptimizationFunctor;
 typedef PosAndNormalsWithRegFunctor OptimizationFunctor;
 
 using namespace Eigen;
@@ -219,9 +222,9 @@ int main() {
 //		fpjParse.project().images[0].rigidTransf.params().r2,
 //		fpjParse.project().images[0].rigidTransf.params().r3);
 //	params.rigidTransf.setScaling(0.5f, 0.5f, 0.5f);
-	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1,
-		fpjParse.project().images[0].rigidTransf.params().s2,
-		fpjParse.project().images[0].rigidTransf.params().s3);
+//	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1,
+//		fpjParse.project().images[0].rigidTransf.params().s2,
+//		fpjParse.project().images[0].rigidTransf.params().s3);
 
 	// Log initialization
 	{
@@ -264,17 +267,10 @@ int main() {
 
 	//OptimizationFunctor functor(data, mesh);
 	OptimizationFunctor functor(data, dataNormals, mesh);
-	//typedef PosAndNormalsFunctor OptimizationFunctor;
-	//OptimizationFunctor functor(data, dataNormals, mesh);
-	//typedef PosNormRegFunctor OptimizationFunctor;
-	//OptimizationFunctor functor(data, dataNormals, mesh);
-	//typedef ExperimentalFunctor OptimizationFunctor;
-	//OptimizationFunctor functor(data, dataNormals, mesh); 
-	//typedef ExperimentalFunctor2 OptimizationFunctor;
-	//OptimizationFunctor functor(data, mesh);
+	
 
 	// Check Jacobian
-	if (1) {
+	if (0) {
 		std::cout << "Test Jacobian MODE" << std::endl;
 		for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
 			NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
@@ -284,16 +280,30 @@ int main() {
 			fd.df(params, J_fd);
 			double diff = (J - J_fd).norm();
 			if (diff > 0) {
-				std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 374) - J_fd.toDense().block<560, 24>(0, 374)).norm() << std::endl;
+				std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 383) - J_fd.toDense().block<560, 24>(0, 383)).norm() << std::endl;
 				std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
-				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 374) - J_fd.toDense().block<560, 24>(561, 374)).norm() << std::endl;
+				std::cout << "p-tsr: " << (J.toDense().block<560, 9>(0, 374) - J_fd.toDense().block<560, 9>(0, 374)).norm() << std::endl;
+				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(561, 374) - J_fd.toDense().block<24, 24>(561, 374)).norm() << std::endl;
+				//std::cout << "tp-uv: " << (J.toDense().block<24, 374>(561, 0) - J_fd.toDense().block<24, 374>(561, 0)).norm() << std::endl;
+				//std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(561, 398) - J_fd.toDense().block<24, 9>(561, 398)).norm() << std::endl;
+				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 383) - J_fd.toDense().block<560, 24>(561, 383)).norm() << std::endl;
 				std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
-				std::cout << "tp-xyz: " << (J.toDense().block<1, 24>(1122, 374) - J_fd.toDense().block<1, 24>(1122, 374)).norm() << std::endl;
-				std::cout << "tp-uv: " << (J.toDense().block<1, 374>(1122, 0) - J_fd.toDense().block<1, 374>(1122, 0)).norm() << std::endl;
+				std::cout << "n-tsr: " << (J.toDense().block<560, 9>(561, 374) - J_fd.toDense().block<560, 9>(561, 374)).norm() << std::endl;
+				std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(1122, 383) - J_fd.toDense().block<24, 24>(1122, 383)).norm() << std::endl;
+				std::cout << "tp-uv: " << (J.toDense().block<24, 374>(1122, 0) - J_fd.toDense().block<24, 374>(1122, 0)).norm() << std::endl;
+				std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(1122, 374) - J_fd.toDense().block<24, 9>(1122, 374)).norm() << std::endl;
 				//std::cout << "p-xyz: " << (J.toDense().block<153, 24>(0, 102) - J_fd.toDense().block<153, 24>(0, 102)).norm() << std::endl;
 				//std::cout << "p-uv: " << (J.toDense().block<153, 102>(0, 0) - J_fd.toDense().block<153, 102>(0, 0)).norm() << std::endl;
 				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(153, 102) - J_fd.toDense().block<24, 24>(153, 102)).norm() << std::endl;
 				//std::cout << "tp-uv: " << (J.toDense().block<24, 102>(153, 0) - J_fd.toDense().block<24, 102>(153, 0)).norm() << std::endl;
+
+				std::ofstream ofs("p_st_fd.csv");
+				ofs << J_fd.toDense().block<560, 9>(0, 374) << std::endl;
+				ofs.close();
+
+				std::ofstream ofs2("p_st_my.csv");
+				ofs2 << J.toDense().block<560, 9>(0, 374)<< std::endl;
+				ofs2.close();
 
 				/*std::ofstream ofs("tp-xyz_fd.csv");
 				ofs << J_fd.toDense().block<24, 24>(153, 102) << std::endl;
@@ -323,7 +333,7 @@ int main() {
 	Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor);
 	lm.setVerbose(true);
 	lm.setMaxfev(40);
-
+	
 	Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
 	//log.color(0, 1, 0);
 	//logsubdivmesh(log, mesh, params.control_vertices);
