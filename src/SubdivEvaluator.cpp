@@ -193,9 +193,9 @@ void SubdivEvaluator::thinPlateEnergy(Matrix3X const& vert_coords,
 		// Test - this could be used to retrieve indices of the 4x4 bicubic patch vertices
 		// => evaluating subdivision surface at the control points we can easily arrive to 4x4 bicubic patch vertices for each control point
 		Far::ConstIndexArray patchVertices = patchTable->GetPatchVertices(*handle);
-		MatrixXX cv_Ws(16, 8);
+		MatrixXX cv_Ws(16, nVertices);
 		for (unsigned int j = 0; j < MAX_NUM_W; j++) {
-			VectorX row = VectorX::Zero(8);
+			VectorX row = VectorX::Zero(nVertices);
 			if (patchVertices[j] < nVertices) {
 				row(patchVertices[j]) = 1.0;
 			} else {
