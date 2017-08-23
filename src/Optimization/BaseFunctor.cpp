@@ -8,10 +8,11 @@
 #include <iostream>
 
 template <int BlkRows, int BlkCols>
-BaseFunctor<BlkRows, BlkCols>::BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, Eigen::Index numJacobianNonzeros, const Matrix3X& data_points, const MeshTopology& mesh) :
+BaseFunctor<BlkRows, BlkCols>::BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, Eigen::Index numJacobianNonzeros, const Matrix3X& data_points, const MeshTopology& mesh, const DataConstraints& constraints) :
 	Base(numParameters, numResiduals),                        
 	data_points(data_points),
 	mesh(mesh),
+	data_constraints(constraints),
 	evaluator(mesh),
 	numParameters(numParameters),
 	numResiduals(numResiduals),
@@ -207,6 +208,7 @@ int BaseFunctor<BlkRows, BlkCols>::df(const InputType& x, JacobianType& fjac) {
 	this->df_impl(x, jvals);
 
 	fjac.resize(this->numResiduals, this->numParameters);
+	// Do not redefine the functor treating duplicate entries!!! The implementation expects to sum them up as done by default.
 	fjac.setFromTriplets(jvals.begin(), jvals.end());
 	fjac.makeCompressed();
 

@@ -34,6 +34,21 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		Index nVertices() const { return control_vertices.cols(); }
 	};
 
+	struct DataConstraint {
+		Eigen::Index cvIdx;	// Model control-vertex index
+		Eigen::Index ptIdx;	// Data point index
+
+		DataConstraint()
+			: cvIdx(0), ptIdx(0) {
+		}
+
+		DataConstraint(const Eigen::Index cvi, const Eigen::Index pti)
+			: cvIdx(cvi), ptIdx(pti) {
+		}
+	};
+	// Type vector of point constraints
+	typedef std::vector<DataConstraint> DataConstraints;
+
 	// And the optimization steps are computed using VectorType.
 	// For subdivs (see xx), the correspondences are of type (int, Vec2) while the updates are of type (Vec2).
 	// The interactions between InputType and VectorType are restricted to:
@@ -42,7 +57,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	typedef VectorX VectorType;
 
 	// Functor constructor
-	BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, Eigen::Index numJacobianNonzeros, const Matrix3X& data_points, const MeshTopology& mesh);
+	BaseFunctor(Eigen::Index numParameters, Eigen::Index numResiduals, Eigen::Index numJacobianNonzeros, const Matrix3X& data_points, const MeshTopology& mesh, const DataConstraints& constraints = DataConstraints());
 
 	// Functor functions
 	// 1. Evaluate the residuals at x
@@ -57,6 +72,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	void increment_in_place(InputType* x, StepType const& p);
 	virtual void increment_in_place_impl(InputType* x, StepType const& p) = 0;
 
+	// Vector of data constraints
+	DataConstraints data_constraints;
+	
 	// Input data
 	Matrix3X data_points;
 
@@ -65,6 +83,13 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 
 	// Subdivison surface evaluator
 	SubdivEvaluator evaluator;
+
+	Eigen::Index nDataPoints() const {
+		return data_points.cols();
+	}
+	Eigen::Index nDataConstraints() const {
+		return data_constraints.size();
+	}
 
 	// Workspace variables for evaluation
 	struct SubdivSurface {
@@ -100,9 +125,10 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// Weighting parameters for the energy terms (where needed)
 	struct EnergyWeights {
 		double thinplate;	// Weight for the thin plate energy
+		double constraints;	// Weight for the point constraints
 	
 		EnergyWeights() 
-			: thinplate(1.0) {
+			: thinplate(1.0), constraints(1.0) {
 		}
 	};
 	EnergyWeights eWeights;
@@ -147,9 +173,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	virtual void initQRSolver(SchurlikeQRSolver &qr);
 
 	/************ UTILITY FUNCTIONS FOR ENERGIES ************/
-	void computeThinPlateMatrix(const InputType& x, MatrixXX &tpe) {
+	void computUVAtControlPoints(const InputType& x, std::vector<SurfacePoint> &us_cv) {
 		/* Evaluate subdivision surface at the control points */
-		std::vector<SurfacePoint> us_cv(x.control_vertices.cols());
+		us_cv.resize(x.control_vertices.cols());
 
 		// Assign face index and UV coordinate to each control vertex
 		int nFaces = int(mesh.quads.cols());
@@ -167,9 +193,56 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			(test_points.colwise() - x.control_vertices.col(i)).colwise().squaredNorm().minCoeff(&test_pt_index);
 			us_cv[i] = uvs[test_pt_index];
 		}
+	}
+
+	void computUVAtConstraintPoints(const InputType& x, const std::vector<DataConstraint>& c, std::vector<SurfacePoint> &us_c) {
+		/* Evaluate subdivision surface at the control points */
+		us_c.resize(c.size());
+
+		// Assign face index and UV coordinate to each control vertex
+		int nFaces = int(mesh.quads.cols());
+
+		// 1. Make a list of test points, e.g. corner of each face
+		Matrix3X test_points(3, nFaces);
+		std::vector<SurfacePoint> uvs{ size_t(nFaces),{ 0,{ 0.0, 0.0 } } };
+		for (int i = 0; i < nFaces; ++i)
+			uvs[i].face = i;
+		evaluator.evaluateSubdivSurface(x.control_vertices, uvs, &test_points);
+
+		for (int i = 0; i < c.size(); i++) {
+			// Closest test point
+			Eigen::Index test_pt_index;
+			(test_points.colwise() - x.control_vertices.col(c.at(i).cvIdx)).colwise().squaredNorm().minCoeff(&test_pt_index);
+			us_c[i] = uvs[test_pt_index];
+		}
+	}
+
+	void computeThinPlateMatrix(const InputType& x, MatrixXX &tpe) {
+		/* Evaluate subdivision surface at the control points */
+		std::vector<SurfacePoint> us_cv;
+		this->computUVAtControlPoints(x, us_cv);
 
 		// Retrieve bicubic patches around the control points of the subdivision surface
 		evaluator.thinPlateEnergy(x.control_vertices, us_cv, tpe);
+	}
+
+	void evaluateSubdivisionSurfaceAtConstraintPoints(const InputType& x, const std::vector<DataConstraint>& c, SubdivSurface& ss, const Eigen::Matrix4f& transf = Eigen::Matrix4f::Identity()) {
+		/* Evaluate subdivision surface at the control points */
+		std::vector<SurfacePoint> us_c;
+		this->computUVAtConstraintPoints(x, c, us_c);
+
+		// Add rigid transformation parameters
+		// Matrix implementation of (t + s * (R * pt))
+		Matrix3X tCVs(3, x.nVertices());
+		for (int i = 0; i < x.nVertices(); i++) {
+			Eigen::Vector4f pt;
+			pt << x.control_vertices(0, i), x.control_vertices(1, i), x.control_vertices(2, i), 1.0f;
+			pt = transf * pt;
+			tCVs(0, i) = pt(0);
+			tCVs(1, i) = pt(1);
+			tCVs(2, i) = pt(2);
+		}
+		evaluator.evaluateSubdivSurface(tCVs, us_c, &(ss.S), &(ss.dSdX), &(ss.dSudX), &(ss.dSvdX), &(ss.dSdu), &(ss.dSdv), &(ss.dSduu), &(ss.dSduv), &(ss.dSdvv));
 	}
 
 	void evaluateSubdivisionSurface(const InputType& x, SubdivSurface& ss) {
@@ -198,11 +271,12 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		}
 	}
 	/************ ENERGIES, GRADIENTS and UPDATES ************/
+	/************ ENERGIES ************/
 	void E_pos(const InputType& x, const Matrix3X& data_points, ValueType& fvec, const Eigen::Index rowOffset) {
 		// Compute subdivision surface
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.translation() * x.rigidTransf.scaling() * x.rigidTransf.rotation(), this->ssurf_tsr);
 
-		for (int i = 0; i < data_points.cols(); i++) {
+		for (int i = 0; i < this->nDataPoints(); i++) {
 			fvec.segment(i * this->rowStride + rowOffset, 3) = (this->ssurf_tsr.S.col(i) - data_points.col(i));
 		}
 	}
@@ -220,6 +294,18 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			fvec.segment(i * this->rowStride + rowOffset, 3) = (normal - data_normals.col(i));
 		}
 	}
+
+	void E_constraints(const InputType& x, const Matrix3X& data_points, const std::vector<DataConstraint>& cs, ValueType& fvec, const Eigen::Index rowOffset) {
+		// Evaluate subdivision surface at control points
+		SubdivSurface ssurf_cs;
+		ssurf_cs.init(this->nDataConstraints());
+		this->evaluateSubdivisionSurfaceAtConstraintPoints(x, cs, ssurf_cs, x.rigidTransf.translation() * x.rigidTransf.scaling() * x.rigidTransf.rotation());
+
+		// Replace the position residuals for the constrained points
+		for (int i = 0; i < this->nDataConstraints(); i++) {
+			fvec.segment(rowOffset + i * 3, 3) = this->eWeights.constraints * (ssurf_cs.S.col(i) - data_points.col(cs.at(i).ptIdx));
+		}
+	}
 	
 	void E_thinplate(const InputType& x, ValueType &fvec, const Eigen::Index rowOffset) {
 		// Compute thin plate energy matrix
@@ -235,6 +321,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		}
 	}
 
+	/************ GRADIENTS ************/
 	void dE_pos_d_X(const InputType& x,
 		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
 		// Evaluate surface at x
@@ -242,7 +329,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 
 		for (int i = 0; i < this->ssurf_r.dSdX.size(); ++i) {
 			auto const& triplet = this->ssurf_r.dSdX[i];
-			assert(0 <= triplet.row() && triplet.row() < data_points.cols());
+			assert(0 <= triplet.row() && triplet.row() < this->nDataPoints());
 			assert(0 <= triplet.col() && triplet.col() < mesh.num_vertices);
 			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s1 * triplet.value());
 			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s2 * triplet.value());
@@ -255,9 +342,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// Evaluate surface at x
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
 
-		Eigen::Index nPoints = data_points.cols();
-
-		for (int i = 0; i < nPoints; i++) {
+		for (int i = 0; i < this->nDataPoints(); i++) {
 			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, x.rigidTransf.params().s1 * this->ssurf_r.dSdu(0, i));
 			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, x.rigidTransf.params().s2 * this->ssurf_r.dSdu(1, i));
 			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, x.rigidTransf.params().s3 * this->ssurf_r.dSdu(2, i));
@@ -273,8 +358,6 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
 
-		Eigen::Index nPoints = data_points.cols();
-
 		Eigen::Index t_base = colBase + 0;
 		Eigen::Index s_base = colBase + 3;
 		Eigen::Index r_base = colBase + 6;
@@ -287,7 +370,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		Eigen::MatrixXf dRdv = Eigen::MatrixXf::Zero(9, 3);
 		RigidTransform::rotationToQuaternion(v, q, &dRdv);
 
-		for (int i = 0; i < nPoints; i++) {
+		for (int i = 0; i < this->nDataPoints(); i++) {
 			jvals.add(this->rowStride * i + rowOffset + 0, t_base + 0, 1.0);
 			jvals.add(this->rowStride * i + rowOffset + 1, t_base + 1, 1.0);
 			jvals.add(this->rowStride * i + rowOffset + 2, t_base + 2, 1.0);
@@ -360,8 +443,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 
-		Eigen::Index nPoints = data_points.cols();
-		for (int i = 0; i < nPoints; i++) {
+		for (int i = 0; i < this->nDataPoints(); i++) {
 			// Normals
 			Vector3 normal = this->ssurf.dSdu.col(i).cross(this->ssurf.dSdv.col(i));
 			float nnorm = normal.norm();
@@ -386,8 +468,6 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 
-		Eigen::Index nPoints = data_points.cols();
-
 		Eigen::Index t_base = colBase + 0;
 		Eigen::Index s_base = colBase + 3;
 		Eigen::Index r_base = colBase + 6;
@@ -400,7 +480,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		Eigen::MatrixXf dRdv = Eigen::MatrixXf::Zero(9, 3);
 		RigidTransform::rotationToQuaternion(v, q, &dRdv);
 
-		for (int i = 0; i < nPoints; i++) {
+		for (int i = 0; i < this->nDataPoints(); i++) {
 			// Compute normal from the first derivatives of the subdivision surface
 			Vector3 normal = this->ssurf.dSdu.col(i).cross(this->ssurf.dSdv.col(i));
 			normal.normalize();
@@ -425,6 +505,75 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 				+ x.rigidTransf.params().s3 * dRdv(8, 2) * normal(2)));
 		}
 	}
+
+	void dE_constraints_d_X(const InputType& x, std::vector<DataConstraint>& cs,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		// Evaluate subdivision surface at control points
+		SubdivSurface ssurf_cs;
+		ssurf_cs.init(this->nDataConstraints());
+		this->evaluateSubdivisionSurfaceAtConstraintPoints(x, cs, ssurf_cs, x.rigidTransf.rotation());
+
+		for (int i = 0; i < ssurf_cs.dSdX.size(); ++i) {
+			auto const& triplet = ssurf_cs.dSdX[i];
+			assert(0 <= triplet.row() && triplet.row() < this->nDataPoints());
+			assert(0 <= triplet.col() && triplet.col() < mesh.num_vertices);
+			jvals.add(rowOffset + triplet.row() * 3 + 0, colBase + triplet.col() * 3 + 0, this->eWeights.constraints * x.rigidTransf.params().s1 * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 1, colBase + triplet.col() * 3 + 1, this->eWeights.constraints * x.rigidTransf.params().s2 * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 2, colBase + triplet.col() * 3 + 2, this->eWeights.constraints * x.rigidTransf.params().s3 * triplet.value());
+		}
+	}
+
+	void dE_constraints_d_rst(const InputType& x, std::vector<DataConstraint>& cs,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		// Evaluate subdivision surface at control points
+		SubdivSurface ssurf_cs, ssurf_cs_r;
+		ssurf_cs.init(this->nDataConstraints());
+		ssurf_cs_r.init(this->nDataConstraints());
+		this->evaluateSubdivisionSurfaceAtConstraintPoints(x, cs, ssurf_cs);
+		this->evaluateSubdivisionSurfaceAtConstraintPoints(x, cs, ssurf_cs_r, x.rigidTransf.rotation());
+
+		Eigen::Index t_base = colBase + 0;
+		Eigen::Index s_base = colBase + 3;
+		Eigen::Index r_base = colBase + 6;
+
+		// Compute derivatives of the rotation wrt rotation parameters
+		Eigen::Vector3f v;
+		v << x.rigidTransf.params().r1, x.rigidTransf.params().r2, x.rigidTransf.params().r3;
+		Eigen::Vector4f q;
+		Eigen::Matrix4f R;
+		Eigen::MatrixXf dRdv = Eigen::MatrixXf::Zero(9, 3);
+		RigidTransform::rotationToQuaternion(v, q, &dRdv);
+		
+		for (int i = 0; i < this->nDataConstraints(); i++) {
+			jvals.add(rowOffset + i * 3 + 0, t_base + 0, this->eWeights.constraints * 1.0);
+			jvals.add(rowOffset + i * 3 + 1, t_base + 1, this->eWeights.constraints * 1.0);
+			jvals.add(rowOffset + i * 3 + 2, t_base + 2, this->eWeights.constraints * 1.0);
+
+			jvals.add(rowOffset + i * 3 + 0, s_base + 0, this->eWeights.constraints * ssurf_cs_r.S(0, i));
+			jvals.add(rowOffset + i * 3 + 1, s_base + 1, this->eWeights.constraints * ssurf_cs_r.S(1, i));
+			jvals.add(rowOffset + i * 3 + 2, s_base + 2, this->eWeights.constraints * ssurf_cs_r.S(2, i));
+
+			jvals.add(rowOffset + i * 3 + 0, r_base + 0, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(0, 0) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 0) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(6, 0) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 0, r_base + 1, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(0, 1) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 1) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(6, 1) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 0, r_base + 2, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(0, 2) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 2) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 *  dRdv(6, 2) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 1, r_base + 0, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(1, 0) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 0) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(7, 0) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 1, r_base + 1, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(1, 1) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 1) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(7, 1) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 1, r_base + 2, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(1, 2) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 2) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(7, 2) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 2, r_base + 0, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(2, 0) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 0) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(8, 0) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 2, r_base + 1, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(2, 1) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 1) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(8, 1) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 2, r_base + 2, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(2, 2) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 2) * ssurf_cs.S(1, i)
+				+ x.rigidTransf.params().s3 * dRdv(8, 2) * ssurf_cs.S(2, i)));
+		}
+	}
+
 	void dE_thinplate_d_X(const InputType& x, 
 		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
 
@@ -442,9 +591,8 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		}
 	}
 
+	/************ UPDATES ************/
 	void inc_X(InputType* x, StepType const& p, const Eigen::Index colBase) {
-		Index nPoints = data_points.cols();
-
 		// Increment control vertices
 		Index nVertices = x->nVertices();
 
@@ -452,12 +600,10 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	}
 
 	void inc_uv(InputType* x, StepType const& p, const Eigen::Index colBase) {
-		Index nPoints = data_points.cols();
-
 		// Increment surface correspondences
 		int loopers = 0;
 		int totalhops = 0;
-		for (int i = 0; i < nPoints; ++i) {
+		for (int i = 0; i < this->nDataPoints(); ++i) {
 			Vector2 du = p.segment<2>(colBase + 2 * i);
 			int nhops = increment_u_crossing_edges(x->control_vertices, x->us[i].face, x->us[i].u, du, &x->us[i].face, &x->us[i].u);
 			if (nhops < 0)
@@ -465,9 +611,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			totalhops += std::abs(nhops);
 		}
 		if (loopers > 0)
-			std::cerr << "[" << totalhops / Scalar(nPoints) << " hops, " << loopers << " points looped]";
+			std::cerr << "[" << totalhops / Scalar(this->nDataPoints()) << " hops, " << loopers << " points looped]";
 		else if (totalhops > 0)
-			std::cerr << "[" << totalhops << "/" << Scalar(nPoints) << " hops]";
+			std::cerr << "[" << totalhops << "/" << Scalar(this->nDataPoints()) << " hops]";
 	}
 
 	void inc_rst(InputType* x, StepType const& p, const Eigen::Index colBase) {

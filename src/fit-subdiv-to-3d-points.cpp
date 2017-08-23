@@ -265,8 +265,10 @@ int main() {
 	initializeUVs(mesh1, params, data);
 	mesh = mesh1;*/
 
-	//OptimizationFunctor functor(data, mesh);
-	OptimizationFunctor functor(data, dataNormals, mesh);
+	OptimizationFunctor::DataConstraints constraints;
+	constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
+	//OptimizationFunctor functor(data, mesh, constraints);
+	OptimizationFunctor functor(data, dataNormals, mesh, constraints);
 	
 
 	// Check Jacobian
@@ -283,20 +285,33 @@ int main() {
 				std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 383) - J_fd.toDense().block<560, 24>(0, 383)).norm() << std::endl;
 				std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
 				std::cout << "p-tsr: " << (J.toDense().block<560, 9>(0, 374) - J_fd.toDense().block<560, 9>(0, 374)).norm() << std::endl;
+				std::cout << "c-xyz: " << (J.toDense().block<3, 24>(561, 383) - J_fd.toDense().block<3, 24>(561, 383)).norm() << std::endl;
+				std::cout << "c-uv: " << (J.toDense().block<3, 374>(561, 0) - J_fd.toDense().block<3, 374>(561, 0)).norm() << std::endl;
+				std::cout << "c-tsr: " << (J.toDense().block<3, 9>(561, 374) - J_fd.toDense().block<3, 9>(561, 374)).norm() << std::endl;
 				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(561, 374) - J_fd.toDense().block<24, 24>(561, 374)).norm() << std::endl;
 				//std::cout << "tp-uv: " << (J.toDense().block<24, 374>(561, 0) - J_fd.toDense().block<24, 374>(561, 0)).norm() << std::endl;
 				//std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(561, 398) - J_fd.toDense().block<24, 9>(561, 398)).norm() << std::endl;
-				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 383) - J_fd.toDense().block<560, 24>(561, 383)).norm() << std::endl;
+				/*std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 383) - J_fd.toDense().block<560, 24>(561, 383)).norm() << std::endl;
 				std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
 				std::cout << "n-tsr: " << (J.toDense().block<560, 9>(561, 374) - J_fd.toDense().block<560, 9>(561, 374)).norm() << std::endl;
 				std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(1122, 383) - J_fd.toDense().block<24, 24>(1122, 383)).norm() << std::endl;
 				std::cout << "tp-uv: " << (J.toDense().block<24, 374>(1122, 0) - J_fd.toDense().block<24, 374>(1122, 0)).norm() << std::endl;
-				std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(1122, 374) - J_fd.toDense().block<24, 9>(1122, 374)).norm() << std::endl;
+				std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(1122, 374) - J_fd.toDense().block<24, 9>(1122, 374)).norm() << std::endl;*/
 				//std::cout << "p-xyz: " << (J.toDense().block<153, 24>(0, 102) - J_fd.toDense().block<153, 24>(0, 102)).norm() << std::endl;
 				//std::cout << "p-uv: " << (J.toDense().block<153, 102>(0, 0) - J_fd.toDense().block<153, 102>(0, 0)).norm() << std::endl;
 				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(153, 102) - J_fd.toDense().block<24, 24>(153, 102)).norm() << std::endl;
 				//std::cout << "tp-uv: " << (J.toDense().block<24, 102>(153, 0) - J_fd.toDense().block<24, 102>(153, 0)).norm() << std::endl;
 
+
+				std::ofstream ofs("j_x_fd.csv");
+				ofs << J_fd.toDense().block<6, 24>(0, 383) << std::endl;
+				ofs.close();
+
+				std::ofstream ofs2("j_x_my.csv");
+				ofs2 << J.toDense().block<6, 24>(0, 383) << std::endl;
+				ofs2.close();
+
+				/*
 				std::ofstream ofs("p_st_fd.csv");
 				ofs << J_fd.toDense().block<560, 9>(0, 374) << std::endl;
 				ofs.close();
@@ -304,7 +319,7 @@ int main() {
 				std::ofstream ofs2("p_st_my.csv");
 				ofs2 << J.toDense().block<560, 9>(0, 374)<< std::endl;
 				ofs2.close();
-
+				*/
 				/*std::ofstream ofs("tp-xyz_fd.csv");
 				ofs << J_fd.toDense().block<24, 24>(153, 102) << std::endl;
 				ofs.close();
@@ -360,8 +375,8 @@ int main() {
 			params.control_vertices = verts1;
 			// Initialize uvs.
 			initializeUVs(mesh1, params, data);
-			OptimizationFunctor functor1(data, dataNormals, mesh1);
-			//OptimizationFunctor functor1(data, mesh1);
+			OptimizationFunctor functor1(data, dataNormals, mesh1, constraints);
+			//OptimizationFunctor functor1(data, mesh1, constraints);
 			Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor1);
 			lm.setVerbose(true);
 			lm.setMaxfev(40);

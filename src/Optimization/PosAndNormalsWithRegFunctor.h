@@ -7,7 +7,7 @@ struct PosAndNormalsWithRegFunctor : public BaseFunctor<6, 2> {
 	// Input normals
 	Matrix3X data_normals;
 
-	PosAndNormalsWithRegFunctor(const Matrix3X& data_points, const Matrix3X &data_normals, const MeshTopology& mesh);
+	PosAndNormalsWithRegFunctor(const Matrix3X& data_points, const Matrix3X &data_normals, const MeshTopology& mesh, const DataConstraints& constraints = DataConstraints());
 
 	// Functor functions
 	// 1. Evaluate the residuals at x

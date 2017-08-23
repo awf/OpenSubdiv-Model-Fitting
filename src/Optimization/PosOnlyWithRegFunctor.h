@@ -4,7 +4,7 @@
 #include "BaseFunctor.h"
 
 struct PosOnlyWithRegFunctor : public BaseFunctor<3, 2> {
-	PosOnlyWithRegFunctor(const Matrix3X& data_points, const MeshTopology& mesh);
+	PosOnlyWithRegFunctor(const Matrix3X& data_points, const MeshTopology& mesh, const DataConstraints& constraints = DataConstraints());
 
 	// Functor functions
 	// 1. Evaluate the residuals at x
