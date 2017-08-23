@@ -13,6 +13,7 @@ PosAndNormalsWithRegFunctor::PosAndNormalsWithRegFunctor(const Matrix3X& data_po
 
 	// Weight the energy terms
 	this->eWeights.thinplate = 0.5;
+	this->eWeights.normals = 0.1;
 	this->eWeights.constraints = 5.0;
 }
 

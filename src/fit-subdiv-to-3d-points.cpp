@@ -272,7 +272,7 @@ int main() {
 	
 
 	// Check Jacobian
-	if (1) {
+	if (0) {
 		std::cout << "Test Jacobian MODE" << std::endl;
 		for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
 			NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
@@ -394,7 +394,19 @@ int main() {
 	
 	if (1) {
 		log.color(.5, .8, 0);
-		logsubdivmesh(log, currMesh, params.control_vertices);
+
+		Matrix4f transf = params.rigidTransf.translation() * params.rigidTransf.scaling() * params.rigidTransf.rotation();
+		Matrix3X tCVs(3, params.control_vertices.cols());
+		for (int i = 0; i < params.control_vertices.cols(); i++) {
+			Eigen::Vector4f pt;
+			pt << params.control_vertices(0, i), params.control_vertices(1, i), params.control_vertices(2, i), 1.0f;
+			pt = transf * pt;
+			tCVs(0, i) = pt(0);
+			tCVs(1, i) = pt(1);
+			tCVs(2, i) = pt(2);
+		}
+
+		logsubdivmesh(log, currMesh, tCVs);
 		//logsubdivmesh(log, mesh1, params.control_vertices);
 	}
 	

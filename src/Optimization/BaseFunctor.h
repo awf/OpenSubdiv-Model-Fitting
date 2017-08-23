@@ -292,7 +292,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			Vector3 normal = this->ssurf_r.dSdu.col(i).cross(this->ssurf_r.dSdv.col(i));
 			normal.normalize();
 
-			fvec.segment(i * this->rowStride + rowOffset, 3) = (normal - data_normals.col(i));
+			fvec.segment(i * this->rowStride + rowOffset, 3) = this->eWeights.normals * (normal - data_normals.col(i));
 		}
 	}
 
@@ -427,15 +427,15 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			float ndndy = normal.transpose() * dndy;
 			float ndndz = normal.transpose() * dndz;
 
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 0, (1.0 / nnorm) * (dndx(0) - normal(0) * ndndx));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 0, (1.0 / nnorm) * (dndx(1) - normal(1) * ndndx));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 0, (1.0 / nnorm) * (dndx(2) - normal(2) * ndndx));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 1, (1.0 / nnorm) * (dndy(0) - normal(0) * ndndy));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 1, (1.0 / nnorm) * (dndy(1) - normal(1) * ndndy));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 1, (1.0 / nnorm) * (dndy(2) - normal(2) * ndndy));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 2, (1.0 / nnorm) * (dndz(0) - normal(0) * ndndz));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 2, (1.0 / nnorm) * (dndz(1) - normal(1) * ndndz));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 2, (1.0 / nnorm) * (dndz(2) - normal(2) * ndndz));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(0) - normal(0) * ndndx));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(1) - normal(1) * ndndx));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(2) - normal(2) * ndndx));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(0) - normal(0) * ndndy));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(1) - normal(1) * ndndy));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(2) - normal(2) * ndndy));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(0) - normal(0) * ndndz));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(1) - normal(1) * ndndz));
+			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(2) - normal(2) * ndndz));
 		}
 	}
 
@@ -455,12 +455,12 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			float ndndu = normal.transpose() * dndu;
 			float ndndv = normal.transpose() * dndv;
 
-			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, (1.0 / nnorm) * (dndu(0) - normal(0) * ndndu));
-			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, (1.0 / nnorm) * (dndu(1) - normal(1) * ndndu));
-			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, (1.0 / nnorm) * (dndu(2) - normal(2) * ndndu));
-			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(0) - normal(0) * ndndv));
-			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(1) - normal(1) * ndndv));
-			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, (1.0 / nnorm) * (dndv(2) - normal(2) * ndndv));
+			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(0) - normal(0) * ndndu));
+			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(1) - normal(1) * ndndu));
+			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(2) - normal(2) * ndndu));
+			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(0) - normal(0) * ndndv));
+			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(1) - normal(1) * ndndv));
+			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(2) - normal(2) * ndndv));
 		}
 	}
 
@@ -486,23 +486,23 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			Vector3 normal = this->ssurf.dSdu.col(i).cross(this->ssurf.dSdv.col(i));
 			normal.normalize();
 
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, (x.rigidTransf.params().s1 * dRdv(0, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 0) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 0) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(6, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, (x.rigidTransf.params().s1 * dRdv(0, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 1) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 1) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(6, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, (x.rigidTransf.params().s1 * dRdv(0, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 2) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 2) * normal(1)
 				+ x.rigidTransf.params().s3 *  dRdv(6, 2) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, (x.rigidTransf.params().s1 * dRdv(1, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 0) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(1, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 0) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(7, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, (x.rigidTransf.params().s1 * dRdv(1, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 1) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(1, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 1) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(7, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, (x.rigidTransf.params().s1 * dRdv(1, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 2) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(1, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 2) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(7, 2) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, (x.rigidTransf.params().s1 * dRdv(2, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 0) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 0) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(8, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, (x.rigidTransf.params().s1 * dRdv(2, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 1) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 1) * normal(1)
 				+ x.rigidTransf.params().s3 *  dRdv(8, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, (x.rigidTransf.params().s1 * dRdv(2, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 2) * normal(1)
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 2) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(8, 2) * normal(2)));
 		}
 	}
