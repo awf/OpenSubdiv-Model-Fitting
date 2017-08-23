@@ -43,7 +43,7 @@ void PosAndNormalsFunctor::df_impl(const InputType& x, Eigen::TripletArray<Scala
 	// 3. Derivatives wrt transformation parameters
 	this->dE_pos_d_rst(x, jvals, rst_base, 0);
 	this->dE_normal_d_rst(x, jvals, rst_base, 3);
-	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
+	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
 }
 
 void PosAndNormalsFunctor::increment_in_place_impl(InputType* x, StepType const& p) {

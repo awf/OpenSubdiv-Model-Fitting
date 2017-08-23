@@ -272,7 +272,7 @@ int main() {
 	
 
 	// Check Jacobian
-	if (0) {
+	if (1) {
 		std::cout << "Test Jacobian MODE" << std::endl;
 		for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
 			NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
@@ -285,18 +285,18 @@ int main() {
 				std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 383) - J_fd.toDense().block<560, 24>(0, 383)).norm() << std::endl;
 				std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
 				std::cout << "p-tsr: " << (J.toDense().block<560, 9>(0, 374) - J_fd.toDense().block<560, 9>(0, 374)).norm() << std::endl;
-				std::cout << "c-xyz: " << (J.toDense().block<3, 24>(561, 383) - J_fd.toDense().block<3, 24>(561, 383)).norm() << std::endl;
-				std::cout << "c-uv: " << (J.toDense().block<3, 374>(561, 0) - J_fd.toDense().block<3, 374>(561, 0)).norm() << std::endl;
-				std::cout << "c-tsr: " << (J.toDense().block<3, 9>(561, 374) - J_fd.toDense().block<3, 9>(561, 374)).norm() << std::endl;
 				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(561, 374) - J_fd.toDense().block<24, 24>(561, 374)).norm() << std::endl;
 				//std::cout << "tp-uv: " << (J.toDense().block<24, 374>(561, 0) - J_fd.toDense().block<24, 374>(561, 0)).norm() << std::endl;
 				//std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(561, 398) - J_fd.toDense().block<24, 9>(561, 398)).norm() << std::endl;
-				/*std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 383) - J_fd.toDense().block<560, 24>(561, 383)).norm() << std::endl;
+				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 383) - J_fd.toDense().block<560, 24>(561, 383)).norm() << std::endl;
 				std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
 				std::cout << "n-tsr: " << (J.toDense().block<560, 9>(561, 374) - J_fd.toDense().block<560, 9>(561, 374)).norm() << std::endl;
-				std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(1122, 383) - J_fd.toDense().block<24, 24>(1122, 383)).norm() << std::endl;
-				std::cout << "tp-uv: " << (J.toDense().block<24, 374>(1122, 0) - J_fd.toDense().block<24, 374>(1122, 0)).norm() << std::endl;
-				std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(1122, 374) - J_fd.toDense().block<24, 9>(1122, 374)).norm() << std::endl;*/
+				std::cout << "c-xyz: " << (J.toDense().block<3, 24>(1122, 383) - J_fd.toDense().block<3, 24>(1122, 383)).norm() << std::endl;
+				std::cout << "c-uv: " << (J.toDense().block<3, 374>(1122, 0) - J_fd.toDense().block<3, 374>(1122, 0)).norm() << std::endl;
+				std::cout << "c-tsr: " << (J.toDense().block<3, 9>(1122, 374) - J_fd.toDense().block<3, 9>(1122, 374)).norm() << std::endl;
+				std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(1125, 383) - J_fd.toDense().block<24, 24>(1125, 383)).norm() << std::endl;
+				std::cout << "tp-uv: " << (J.toDense().block<24, 374>(1125, 0) - J_fd.toDense().block<24, 374>(1125, 0)).norm() << std::endl;
+				std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(1125, 374) - J_fd.toDense().block<24, 9>(1125, 374)).norm() << std::endl;
 				//std::cout << "p-xyz: " << (J.toDense().block<153, 24>(0, 102) - J_fd.toDense().block<153, 24>(0, 102)).norm() << std::endl;
 				//std::cout << "p-uv: " << (J.toDense().block<153, 102>(0, 0) - J_fd.toDense().block<153, 102>(0, 0)).norm() << std::endl;
 				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(153, 102) - J_fd.toDense().block<24, 24>(153, 102)).norm() << std::endl;

@@ -37,6 +37,7 @@ void PosAndNormalsWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArra
 	this->dE_pos_d_X(x, jvals, X_base, 0);
 	this->dE_normal_d_X(x, jvals, X_base, 3);
 	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
+	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
 
 	// 2. Derivatives wrt correspondences
 	this->dE_pos_d_uv(x, jvals, ubase, 0);
@@ -45,10 +46,7 @@ void PosAndNormalsWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArra
 	// 3. Derivatives wrt transformation parameters
 	this->dE_pos_d_rst(x, jvals, rst_base, 0);
 	this->dE_normal_d_rst(x, jvals, rst_base, 3);
-	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
-
-	// 3. Derivatives of thinplate wrt control vertices
-	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
+	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
 }
 
 void PosAndNormalsWithRegFunctor::increment_in_place_impl(InputType* x, StepType const& p) {

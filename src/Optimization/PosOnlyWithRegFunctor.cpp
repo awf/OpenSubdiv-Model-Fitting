@@ -33,6 +33,7 @@ void PosOnlyWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArray<Scal
 	// 1. Derivatives wrt control vertices.
 	this->dE_pos_d_X(x, jvals, X_base, 0);
 	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3);
+	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + this->nDataConstraints() * 3);
 
 	// 2. Derivatives wrt correspondences
 	this->dE_pos_d_uv(x, jvals, ubase, 0);
@@ -40,9 +41,6 @@ void PosOnlyWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArray<Scal
 	// 2. Derivatives wrt correspondences
 	this->dE_pos_d_rst(x, jvals, rst_base, 0);
 	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3);
-
-	// 3. Derivatives of thinplate wrt control vertices
-	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + this->nDataConstraints() * 3);
 }
 
 void PosOnlyWithRegFunctor::increment_in_place_impl(InputType* x, StepType const& p) {

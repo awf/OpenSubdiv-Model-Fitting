@@ -125,10 +125,11 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	// Weighting parameters for the energy terms (where needed)
 	struct EnergyWeights {
 		double thinplate;	// Weight for the thin plate energy
+		double normals;		// Weight for the data normals
 		double constraints;	// Weight for the point constraints
 	
 		EnergyWeights() 
-			: thinplate(1.0), constraints(1.0) {
+			: thinplate(1.0), normals(1.0), constraints(1.0) {
 		}
 	};
 	EnergyWeights eWeights;
