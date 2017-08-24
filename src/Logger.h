@@ -76,6 +76,21 @@ public:
 		this->instance()->log(Logger::Debug, ss.str());
 		f << J;
 	}
+	template <typename Derived>
+	void logMatrixCSV(Eigen::MatrixBase<Derived> const& J, char const* filename) {
+		std::ofstream f(filename);
+		if (!f.good()) {
+			std::stringstream ss;
+			ss << "Failed to open [" << filename << "] for writing";
+			this->instance()->log(Logger::Error, ss.str());
+			return;
+		}
+
+		std::stringstream ss;
+		std::cout << "Writing " << J.rows() << "x" << J.cols() << " dense to \"" << filename << "\" in CSV format." << std::endl;
+		this->instance()->log(Logger::Debug, ss.str());
+		f << J.format(Logger::CSVFormat);
+	}
 
 	void setLevel(Logger::Level level) {
 		this->level = level;
@@ -85,6 +100,9 @@ public:
 	static void createLogger(const std::string &_fileName);
 	// Singleton getter
 	static Logger* instance(); 
+
+	// define the format you want, you only need one instance of this...
+	const static Eigen::IOFormat CSVFormat;
 
 private:
 	std::ofstream outFile;

@@ -2,6 +2,7 @@
 #include <ctime>
 
 Logger *Logger::s_instance = NULL;
+const Eigen::IOFormat Logger::CSVFormat = Eigen::IOFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
 
 Logger::Logger(const std::string &_fileName) 
 	: outFile(std::ofstream(_fileName)), level(Level::Info) {
