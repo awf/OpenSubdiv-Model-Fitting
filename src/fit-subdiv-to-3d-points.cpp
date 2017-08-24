@@ -269,7 +269,7 @@ int main() {
 	mesh = mesh1;*/
 
 	OptimizationFunctor::DataConstraints constraints;
-	//constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
+	constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
 	//OptimizationFunctor functor(data, mesh, constraints);
 	OptimizationFunctor functor(data, dataNormals, mesh, constraints);
 	
