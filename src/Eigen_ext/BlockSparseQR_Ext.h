@@ -336,7 +336,6 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
 	// Split the main block from the separately treated bottom
 	MatrixType matBlock = mat.topRows(n1);
 	MatrixType matBottom = mat.bottomRows(n2);
-	
 
     /// mat = | J1 J2 |
     /// J1 has m1 cols 
@@ -359,8 +358,12 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
     /// A = | Atop |      m1 x m2
     ///     | Abot |    n-m1 x m2
     MatrixType Atop = A.topRows(m1);
-    RightBlockMatrixType Abot = A.bottomRows(n1-m1); 
-    m_rightSolver.compute(Abot);
+    RightBlockMatrixType Abot = A.bottomRows(n1-m1);
+	// Concatenate remaining Abot with already diagonal bottom rows and solve
+	RightBlockMatrixType Rbot(n1 - m1 + n2, m2);
+	Rbot.topRows(n1 - m1) = Abot;
+	Rbot.bottomRows(n2) = matBottom.rightCols(m2);
+    m_rightSolver.compute(Rbot);
     eigen_assert(m_rightSolver.info() == Success);
 
     /// Compute final Q and R
@@ -374,7 +377,7 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
     /// R = | head(R1,m1) Atop*P2  |      m1 rows
     ///     | 0           R2       |
     {
-      Index R2_rows = n1 - m1;
+      Index R2_rows = (n1 + n2) - m1;
       DenseMatrix R2 = m_rightSolver.matrixR().topRows(R2_rows).template triangularView<Upper>(); // xx fix
       m_R.resize(n1+n2, m1+m2);
 
@@ -396,17 +399,10 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
           triplets.add_if_nonzero(i, m1 + j, AtopP2.coeff(i, j));
 
       // bottom right corner, head(R2, m2)
-      for (Index i = 0; i < (std::min)(n1-m1, m2); i++)
+      for (Index i = 0; i < (std::min)((n1+n2)-m1, m2); i++)
         for (int j = 0; j < m2; j++)
           triplets.add_if_nonzero(m1 + i, m1+j, R2(i, j));
       
-	  // Already upper triangular bottom rows connection
-	  for (Index i = 0; i < n2; i++) {
-		  for (Index j = m1; j < m2; j++) {
-			  triplets.add_if_nonzero(n1 + i, m1 + j, matBottom.toDense()(i, j));
-		  }
-	  }
-	  
 	  m_R.setFromTriplets(triplets.begin(), triplets.end());
 
 
@@ -450,13 +446,8 @@ struct BlockSparseQR_Ext_QProduct : ReturnByValue<BlockSparseQR_Ext_QProduct<Spa
     Index m1 = m_qr.m_blockCols;
 	Index n1 = m_qr.m_blockRows;
 
-	DesType otherBlock = m_other.topRows(n1);
-
     eigen_assert(n == m_other.rows() && "Non conforming object sizes");
-	eigen_assert(n1 == otherBlock.rows() && "Non conforming object sizes");
-    
-	DesType resTmp = res.topRows(n1);
-
+	
     if (m_transpose)
     {
       /// Q' Matrix
@@ -464,11 +455,13 @@ struct BlockSparseQR_Ext_QProduct : ReturnByValue<BlockSparseQR_Ext_QProduct<Spa
       ///     | 0 Q2' |          |     0   (n-m1)x(n-m1)   |           
 
       /// Q v = | I 0   | * Q1' * v   = | I 0   | * [ Q1tv1 ]  = [ Q1tv1       ]
-      ///       | 0 Q2' |               | 0 Q2' |   [ Q1tv2 ]    [ Q2' * Q1tv2 ]      
+      ///       | 0 Q2' |               | 0 Q2' |   [ Q1tv2 ]    [ Q2' * Q1tv2 ]    
 
-	  resTmp = m_qr.m_leftSolver.matrixQ().transpose() * otherBlock;
+	  res = m_other;
+	  res.topRows(n1) = m_qr.m_leftSolver.matrixQ().transpose() * m_other.topRows(n1);
+	  //res = m_qr.m_leftSolver.matrixQ().transpose() * m_other.topRows(m1);
       // res.topRows(m1) = Q1tv.topRows(m1);
-	  resTmp.bottomRows(n1 - m1) = m_qr.m_rightSolver.matrixQ().transpose() * resTmp.bottomRows(n1 - m1);
+	  res.bottomRows(n - m1) = m_qr.m_rightSolver.matrixQ().transpose() * res.bottomRows(n - m1);
     }
     else
     {
@@ -479,13 +472,11 @@ struct BlockSparseQR_Ext_QProduct : ReturnByValue<BlockSparseQR_Ext_QProduct<Spa
       /// Q v = Q1 * | I 0  | * | v1 | =  Q1 * | v1      | 
       ///            | 0 Q2 |   | v2 |         | Q2 * v2 | 
 
-	  resTmp = otherBlock;
-      DesType Q2v2 = otherBlock.bottomRows(n1 - m1);
-	  resTmp.bottomRows(n1 - m1) = m_qr.m_rightSolver.matrixQ() * Q2v2;
-	  resTmp = (m_qr.m_leftSolver.matrixQ() * resTmp).eval();
+	  res = m_other;
+      DesType Q2v2 = m_other.bottomRows(n - m1);
+	  res.bottomRows(n - m1) = m_qr.m_rightSolver.matrixQ() * Q2v2;
+	  res = (m_qr.m_leftSolver.matrixQ() * res).eval();
     }
-
-	res.topRows(n1) = resTmp;
   }
 
   const SparseQRType& m_qr;

@@ -184,6 +184,8 @@ int main() {
 		}
 	}
 
+	std::cout << nDataPoints << std::endl;
+
 	// Draw one of the silhouettes
 	log3d logb("banana.html", "fit-subdiv-to-3d-points");
 	logb.ArcRotateCamera();
@@ -218,14 +220,15 @@ int main() {
 	log.color(0.0, 0.0, 1.0);
 	log.position(log.CreateSphere(0, 0.05), barycenter(0), barycenter(1), barycenter(2));
 	params.rigidTransf.setTranslation(barycenter(0), barycenter(1), barycenter(2));
-//	params.rigidTransf.setRotation(fpjParse.project().images[0].rigidTransf.params().r1,
-//		fpjParse.project().images[0].rigidTransf.params().r2,
-//		fpjParse.project().images[0].rigidTransf.params().r3);
+	/*
+	params.rigidTransf.setRotation(fpjParse.project().images[0].rigidTransf.params().r1,
+		fpjParse.project().images[0].rigidTransf.params().r2,
+		fpjParse.project().images[0].rigidTransf.params().r3);
 //	params.rigidTransf.setScaling(0.5f, 0.5f, 0.5f);
-//	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1,
-//		fpjParse.project().images[0].rigidTransf.params().s2,
-//		fpjParse.project().images[0].rigidTransf.params().s3);
-
+	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1 * 2.0,
+		fpjParse.project().images[0].rigidTransf.params().s2 * 2.0,
+		fpjParse.project().images[0].rigidTransf.params().s3 * 2.0);
+	*/
 	// Log initialization
 	{
 		Eigen::Vector3f v;
@@ -266,7 +269,7 @@ int main() {
 	mesh = mesh1;*/
 
 	OptimizationFunctor::DataConstraints constraints;
-	constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
+	//constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
 	//OptimizationFunctor functor(data, mesh, constraints);
 	OptimizationFunctor functor(data, dataNormals, mesh, constraints);
 	

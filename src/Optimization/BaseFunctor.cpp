@@ -180,7 +180,7 @@ Scalar BaseFunctor<BlkRows, BlkCols>::estimateNorm(InputType const& x, StepType 
 template <int BlkRows, int BlkCols>
 void BaseFunctor<BlkRows, BlkCols>::initQRSolver(SchurlikeQRSolver &qr) {
 	// set block size
-	qr.setBlockParams(data_points.cols() * 3, data_points.cols() * 2);
+	qr.setBlockParams(data_points.cols() * BlkRows, data_points.cols() * BlkCols);
 	qr.getLeftSolver().setSparseBlockParams(BlkRows, BlkCols);
 }
 
