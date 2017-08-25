@@ -4,6 +4,8 @@
 #include <iostream>
 #include <iomanip>
 
+#include <random>
+
 #include <Eigen/Eigen>
 
 #include "log3d.h"
@@ -20,9 +22,9 @@
 #include "Optimization/PosAndNormalsWithRegFunctor.h"
 
 //typedef PosOnlyFunctor OptimizationFunctor;
-//typedef PosOnlyWithRegFunctor OptimizationFunctor;
+typedef PosOnlyWithRegFunctor OptimizationFunctor;
 //typedef PosAndNormalsFunctor OptimizationFunctor;
-typedef PosAndNormalsWithRegFunctor OptimizationFunctor;
+//typedef PosAndNormalsWithRegFunctor OptimizationFunctor;
 
 using namespace Eigen;
 
@@ -159,6 +161,8 @@ int main() {
 	Logger::instance()->log(Logger::Info, ss.str());
 	Matrix3X data(3, nDataPoints);
 	Matrix3X dataNormals(3, nDataPoints);
+	std::default_random_engine gen;
+	std::uniform_real_distribution<double> dist(0.0, 1.0);
 	for (int i = 0; i < int(fpjParse.project().images[0].silhouettePoints[0].rows()); i++) {
 		for (int j = 0; j < nParamVals; j++) {
 			Eigen::Vector2f pt = BezierPatch::evaluateAt(fpjParse.project().images[0].silhouettePoints[0].row(i),
@@ -167,7 +171,7 @@ int main() {
 				fpjParse.project().images[0].silhouettePoints[3].row(i), t[j]);
 			data(0, nParamVals * i + j) = pt(0);
 			data(1, nParamVals * i + j) = pt(1);
-			data(2, nParamVals * i + j) = 0.0f;
+			data(2, nParamVals * i + j) = dist(gen) * 0.125 - 0.125/2.0;
 			
 			Eigen::Vector2f n = BezierPatch::evaluateNormalAt(fpjParse.project().images[0].silhouettePoints[0].row(i),
 				fpjParse.project().images[0].silhouettePoints[1].row(i),
@@ -204,13 +208,13 @@ int main() {
 	// Make "control" cube
 	MeshTopology mesh;
 	Matrix3X control_vertices_gt;
-	//makeFromPLYModel(&mesh, &control_vertices_gt, plyParse.model());
+	makeFromPLYModel(&mesh, &control_vertices_gt, plyParse.model());
 	//std::cout << mesh.quads << std::endl;
-	makeCube(&mesh, &control_vertices_gt);	
-	
+	//makeCube(&mesh, &control_vertices_gt);	
+
 	// INITIAL PARAMS
 	OptimizationFunctor::InputType params;
-	params.control_vertices = control_vertices_gt + 0.1 * MatrixXX::Random(3, control_vertices_gt.cols());
+	params.control_vertices = control_vertices_gt;// +0.1 * MatrixXX::Random(3, control_vertices_gt.cols());
 	params.us.resize(nDataPoints);
 	//params.rigidTransf.setTranslation(fpjParse.project().images[0].rigidTransf.params().t1, 
 	//	fpjParse.project().images[0].rigidTransf.params().t2, 
@@ -220,40 +224,29 @@ int main() {
 	log.color(0.0, 0.0, 1.0);
 	log.position(log.CreateSphere(0, 0.05), barycenter(0), barycenter(1), barycenter(2));
 	params.rigidTransf.setTranslation(barycenter(0), barycenter(1), barycenter(2));
-	/*
 	params.rigidTransf.setRotation(fpjParse.project().images[0].rigidTransf.params().r1,
 		fpjParse.project().images[0].rigidTransf.params().r2,
 		fpjParse.project().images[0].rigidTransf.params().r3);
-//	params.rigidTransf.setScaling(0.5f, 0.5f, 0.5f);
+	//params.rigidTransf.setScaling(0.5, 0.5, 0.5);
+	//params.rigidTransf.setScaling(1.0, 10.0, 5.0);
 	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1 * 2.0,
 		fpjParse.project().images[0].rigidTransf.params().s2 * 2.0,
 		fpjParse.project().images[0].rigidTransf.params().s3 * 2.0);
-	*/
+	
 	// Log initialization
 	{
-		Eigen::Vector3f v;
-		v << params.rigidTransf.params().r1, params.rigidTransf.params().r2, params.rigidTransf.params().r3;
-		Eigen::Vector4f q;
-		Eigen::Matrix4f R;
-		Eigen::MatrixXf dRdv = Eigen::MatrixXf::Zero(9, 3);
-		RigidTransform::rotationToQuaternion(v, q, &dRdv);
-		RigidTransform::quaternionToMatrix(q, R);
-		float lambda = params.rigidTransf.params().s1;
-		Eigen::Vector4f t;
-		t << params.rigidTransf.params().t1, params.rigidTransf.params().t2, params.rigidTransf.params().t3, 0.0;
-		// Rotate the control vertices
-		Matrix3X rCVs(3, params.nVertices());
-		for (int i = 0; i < params.nVertices(); i++) {
+		Matrix4f transf = params.rigidTransf.translation() * params.rigidTransf.scaling() * params.rigidTransf.rotation();
+		Matrix3X tCVs(3, params.control_vertices.cols());
+		for (int i = 0; i < params.control_vertices.cols(); i++) {
 			Eigen::Vector4f pt;
-			pt << params.control_vertices(0, i), params.control_vertices(1, i), params.control_vertices(2, i), 0.0f;
-			// The translation 't' zeroes out in the derivative, scale is added below
-			pt = t + lambda * (pt);
-			rCVs(0, i) = pt(0);
-			rCVs(1, i) = pt(1);
-			rCVs(2, i) = pt(2);
+			pt << params.control_vertices(0, i), params.control_vertices(1, i), params.control_vertices(2, i), 1.0f;
+			pt = transf * pt;
+			tCVs(0, i) = pt(0);
+			tCVs(1, i) = pt(1);
+			tCVs(2, i) = pt(2);
 		}
-		logb.color(0, 1, 0);
-		logsubdivmesh(logb, mesh, rCVs);
+
+		logsubdivmesh(log, mesh, tCVs);
 	}
 
 	// Initialize uvs.
@@ -270,8 +263,8 @@ int main() {
 
 	OptimizationFunctor::DataConstraints constraints;
 	constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
-	//OptimizationFunctor functor(data, mesh, constraints);
-	OptimizationFunctor functor(data, dataNormals, mesh, constraints);
+	OptimizationFunctor functor(data, mesh, constraints);
+	//OptimizationFunctor functor(data, dataNormals, mesh, constraints);
 	
 
 	// Check Jacobian
@@ -284,36 +277,42 @@ int main() {
 			functor.df(params, J);
 			fd.df(params, J_fd);
 			double diff = (J - J_fd).norm();
+			unsigned int num_uv = nDataPoints * 2;
+			unsigned int num_tsr = 9;
+			unsigned int num_xyz = mesh.num_vertices * 3;
+			unsigned int num_res_p = nDataPoints * 3;
+			unsigned int num_res_n = nDataPoints * 3;
+			unsigned int num_res_c = constraints.size() * 3;
+			unsigned int num_res_tp = num_xyz;
 			if (diff > 0) {
-				std::cout << "p-xyz: " << (J.toDense().block<560, 24>(0, 383) - J_fd.toDense().block<560, 24>(0, 383)).norm() << std::endl;
-				std::cout << "p-uv: " << (J.toDense().block<560, 374>(0, 0) - J_fd.toDense().block<560, 374>(0, 0)).norm() << std::endl;
-				std::cout << "p-tsr: " << (J.toDense().block<560, 9>(0, 374) - J_fd.toDense().block<560, 9>(0, 374)).norm() << std::endl;
-				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(561, 374) - J_fd.toDense().block<24, 24>(561, 374)).norm() << std::endl;
-				//std::cout << "tp-uv: " << (J.toDense().block<24, 374>(561, 0) - J_fd.toDense().block<24, 374>(561, 0)).norm() << std::endl;
-				//std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(561, 398) - J_fd.toDense().block<24, 9>(561, 398)).norm() << std::endl;
-				std::cout << "n-xyz: " << (J.toDense().block<560, 24>(561, 383) - J_fd.toDense().block<560, 24>(561, 383)).norm() << std::endl;
-				std::cout << "n-uv: " << (J.toDense().block<560, 374>(561, 0) - J_fd.toDense().block<560, 374>(561, 0)).norm() << std::endl;
-				std::cout << "n-tsr: " << (J.toDense().block<560, 9>(561, 374) - J_fd.toDense().block<560, 9>(561, 374)).norm() << std::endl;
-				std::cout << "c-xyz: " << (J.toDense().block<3, 24>(1122, 383) - J_fd.toDense().block<3, 24>(1122, 383)).norm() << std::endl;
-				std::cout << "c-uv: " << (J.toDense().block<3, 374>(1122, 0) - J_fd.toDense().block<3, 374>(1122, 0)).norm() << std::endl;
-				std::cout << "c-tsr: " << (J.toDense().block<3, 9>(1122, 374) - J_fd.toDense().block<3, 9>(1122, 374)).norm() << std::endl;
-				std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(1125, 383) - J_fd.toDense().block<24, 24>(1125, 383)).norm() << std::endl;
-				std::cout << "tp-uv: " << (J.toDense().block<24, 374>(1125, 0) - J_fd.toDense().block<24, 374>(1125, 0)).norm() << std::endl;
-				std::cout << "tp-tsr: " << (J.toDense().block<24, 9>(1125, 374) - J_fd.toDense().block<24, 9>(1125, 374)).norm() << std::endl;
-				//std::cout << "p-xyz: " << (J.toDense().block<153, 24>(0, 102) - J_fd.toDense().block<153, 24>(0, 102)).norm() << std::endl;
-				//std::cout << "p-uv: " << (J.toDense().block<153, 102>(0, 0) - J_fd.toDense().block<153, 102>(0, 0)).norm() << std::endl;
-				//std::cout << "tp-xyz: " << (J.toDense().block<24, 24>(153, 102) - J_fd.toDense().block<24, 24>(153, 102)).norm() << std::endl;
-				//std::cout << "tp-uv: " << (J.toDense().block<24, 102>(153, 0) - J_fd.toDense().block<24, 102>(153, 0)).norm() << std::endl;
-
-
-				std::ofstream ofs("j_x_fd.csv");
-				ofs << J_fd.toDense().block<6, 24>(0, 383) << std::endl;
+				std::cout << "pn-xyz: " << (J.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz) - J_fd.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz)).norm() << std::endl;
+				std::cout << "pn-uv: " << (J.toDense().block(0, 0, num_res_p + num_res_n, num_uv) - J_fd.toDense().block(0, 0, num_res_p + num_res_n, num_uv)).norm() << std::endl;
+				std::cout << "pn-t: " << (J.toDense().block(0, num_uv, num_res_p + num_res_n, 3) - J_fd.toDense().block(0, num_uv, num_res_p + num_res_n, 3)).norm() << std::endl;
+				std::cout << "pn-s: " << (J.toDense().block(0, num_uv + 3, num_res_p + num_res_n, 3) - J_fd.toDense().block(0, num_uv + 3, num_res_p + num_res_n, 3)).norm() << std::endl;
+				std::cout << "pn-r: " << (J.toDense().block(0, num_uv + 6, num_res_p + num_res_n, 3) - J_fd.toDense().block(0, num_uv + 6, num_res_p + num_res_n, 3)).norm() << std::endl;
+				std::cout << "pn-tsr: " << (J.toDense().block(0, num_uv, num_res_p + num_res_n, num_tsr) - J_fd.toDense().block(0, num_uv, num_res_p + num_res_n, num_tsr)).norm() << std::endl;
+				std::cout << "c-xyz: " << (J.toDense().block(num_res_p + num_res_n, num_uv + num_tsr, num_res_c, num_xyz) - J_fd.toDense().block(num_res_p + num_res_n, num_uv + num_tsr, num_res_c, num_xyz)).norm() << std::endl;
+				std::cout << "c-uv: " << (J.toDense().block(num_res_p + num_res_n, 0, num_res_c, num_uv) - J_fd.toDense().block(num_res_p + num_res_n, 0, num_res_c, num_uv)).norm() << std::endl;
+				std::cout << "c-tsr: " << (J.toDense().block(num_res_p + num_res_n, num_uv, num_res_c, num_tsr) - J_fd.toDense().block(num_res_p + num_res_n, num_uv, num_res_c, num_tsr)).norm() << std::endl;
+				std::cout << "tp-xyz: " << (J.toDense().block(num_res_p + num_res_n + num_res_c, num_uv + num_tsr, num_res_tp, num_xyz) - J_fd.toDense().block(num_res_p + num_res_n + num_res_c, num_uv + num_tsr, num_res_tp, num_xyz)).norm() << std::endl;
+				std::cout << "tp-uv: " << (J.toDense().block(num_res_p + num_res_n + num_res_c, 0, num_res_tp, num_uv) - J_fd.toDense().block(num_res_p + num_res_n + num_res_c, 0, num_res_tp, num_uv)).norm() << std::endl;
+				std::cout << "tp-tsr: " << (J.toDense().block(num_res_p + num_res_n + num_res_c, num_uv, num_res_tp, num_tsr) - J_fd.toDense().block(num_res_p + num_res_n + num_res_c, num_uv, num_res_tp, num_tsr)).norm() << std::endl;
+				
+				/*
+				std::ofstream ofs("j_xyz_fd.csv");
+				ofs << J_fd.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_c + num_res_tp, num_xyz) << std::endl;
 				ofs.close();
 
-				std::ofstream ofs2("j_x_my.csv");
-				ofs2 << J.toDense().block<6, 24>(0, 383) << std::endl;
+				std::ofstream ofs2("j_xyz_my.csv");
+				ofs2 << J.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_c + num_res_tp, num_xyz) << std::endl;
 				ofs2.close();
+				*/
 
+				Logger::instance()->logMatrixCSV(J_fd.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz), "j_pnxyz_fd.csv");
+				Logger::instance()->logMatrixCSV(J.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz), "j_pnxyz_my.csv");
+				//Logger::instance()->logMatrixCSV(J_fd.toDense().block(num_res_p + num_res_c, num_uv, num_res_tp, num_tsr + num_xyz), "j_tp_fd.csv");
+				//Logger::instance()->logMatrixCSV(J.toDense().block(num_res_p + num_res_c, num_uv, num_res_tp, num_tsr + num_xyz), "j_tp_my.csv");
+				
 				/*
 				std::ofstream ofs("p_st_fd.csv");
 				ofs << J_fd.toDense().block<560, 9>(0, 374) << std::endl;
@@ -378,8 +377,8 @@ int main() {
 			params.control_vertices = verts1;
 			// Initialize uvs.
 			initializeUVs(mesh1, params, data);
-			OptimizationFunctor functor1(data, dataNormals, mesh1, constraints);
-			//OptimizationFunctor functor1(data, mesh1, constraints);
+			//OptimizationFunctor functor1(data, dataNormals, mesh1, constraints);
+			OptimizationFunctor functor1(data, mesh1, constraints);
 			Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor1);
 			lm.setVerbose(true);
 			lm.setMaxfev(40);

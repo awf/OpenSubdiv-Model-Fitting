@@ -291,7 +291,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			// Compute normal from the first derivatives of the subdivision surface
 			Vector3 normal = this->ssurf_r.dSdu.col(i).cross(this->ssurf_r.dSdv.col(i));
 			normal.normalize();
-
+			
 			fvec.segment(i * this->rowStride + rowOffset, 3) = this->eWeights.normals * (normal - data_normals.col(i));
 		}
 	}
@@ -316,9 +316,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// The thin plate energy evaluated at each control vertex
 		tpe = tpe.sqrt() * x.control_vertices.transpose();
 		for (int i = 0; i < tpe.rows(); i++) {
-			fvec(rowOffset + i * 3 + 0) = this->eWeights.thinplate * tpe(i, 0);
-			fvec(rowOffset + i * 3 + 1) = this->eWeights.thinplate * tpe(i, 1);
-			fvec(rowOffset + i * 3 + 2) = this->eWeights.thinplate * tpe(i, 2);
+			fvec(rowOffset + i * 3 + 0) = this->eWeights.thinplate * x.rigidTransf.params().s1 * tpe(i, 0);
+			fvec(rowOffset + i * 3 + 1) = this->eWeights.thinplate * x.rigidTransf.params().s2 * tpe(i, 1);
+			fvec(rowOffset + i * 3 + 2) = this->eWeights.thinplate * x.rigidTransf.params().s3 * tpe(i, 2);
 		}
 	}
 
@@ -326,15 +326,24 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	void dE_pos_d_X(const InputType& x,
 		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
 		// Evaluate surface at x
-		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
+		this->evaluateSubdivisionSurface(x, this->ssurf);
 
-		for (int i = 0; i < this->ssurf_r.dSdX.size(); ++i) {
-			auto const& triplet = this->ssurf_r.dSdX[i];
+		// Get rotation matrix
+		Matrix4f R = x.rigidTransf.rotation();
+
+		for (int i = 0; i < this->ssurf.dSdX.size(); ++i) {
+			auto const& triplet = this->ssurf.dSdX[i];
 			assert(0 <= triplet.row() && triplet.row() < this->nDataPoints());
 			assert(0 <= triplet.col() && triplet.col() < mesh.num_vertices);
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s1 * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s2 * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s3 * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s1 * R(0, 0) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s2 * R(1, 0) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s3 * R(2, 0) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s1 * R(0, 1) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s2 * R(1, 1) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s3 * R(2, 1) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s1 * R(0, 2) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s2 * R(1, 2) * triplet.value());
+			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s3 * R(2, 2) * triplet.value());
 		}
 	}
 
@@ -367,7 +376,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		Eigen::Vector3f v;
 		v << x.rigidTransf.params().r1, x.rigidTransf.params().r2, x.rigidTransf.params().r3;
 		Eigen::Vector4f q;
-		Eigen::Matrix4f R;
+		Eigen::Matrix4f R = x.rigidTransf.rotation();
 		Eigen::MatrixXf dRdv = Eigen::MatrixXf::Zero(9, 3);
 		RigidTransform::rotationToQuaternion(v, q, &dRdv);
 
@@ -380,24 +389,15 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			jvals.add(this->rowStride * i + rowOffset + 1, s_base + 1, this->ssurf_r.S(1, i));
 			jvals.add(this->rowStride * i + rowOffset + 2, s_base + 2, this->ssurf_r.S(2, i));
 
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, (x.rigidTransf.params().s1 * dRdv(0, 0) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 0) * this->ssurf.S(1, i) 
-				+ x.rigidTransf.params().s3 * dRdv(6, 0) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, (x.rigidTransf.params().s1 * dRdv(0, 1) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 1) * this->ssurf.S(1, i) 
-				+ x.rigidTransf.params().s3 * dRdv(6, 1) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, (x.rigidTransf.params().s1 * dRdv(0, 2) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 2) * this->ssurf.S(1, i)
-				+ x.rigidTransf.params().s3 *  dRdv(6, 2) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, (x.rigidTransf.params().s1 * dRdv(1, 0) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 0) * this->ssurf.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(7, 0) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, (x.rigidTransf.params().s1 * dRdv(1, 1) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 1) * this->ssurf.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(7, 1) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, (x.rigidTransf.params().s1 * dRdv(1, 2) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 2) * this->ssurf.S(1, i) 
-				+ x.rigidTransf.params().s3 * dRdv(7, 2) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, (x.rigidTransf.params().s1 * dRdv(2, 0) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 0) * this->ssurf.S(1, i) 
-				+ x.rigidTransf.params().s3 * dRdv(8, 0) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, (x.rigidTransf.params().s1 * dRdv(2, 1) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 1) * this->ssurf.S(1, i) 
-				+ x.rigidTransf.params().s3 *  dRdv(8, 1) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, (x.rigidTransf.params().s1 * dRdv(2, 2) * this->ssurf.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 2) * this->ssurf.S(1, i) 
-				+ x.rigidTransf.params().s3 * dRdv(8, 2) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, x.rigidTransf.params().s1 * (dRdv(0, 0) * this->ssurf.S(0, i) + dRdv(3, 0) * this->ssurf.S(1, i) + dRdv(6, 0) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, x.rigidTransf.params().s1 * (dRdv(0, 1) * this->ssurf.S(0, i) + dRdv(3, 1) * this->ssurf.S(1, i) + dRdv(6, 1) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, x.rigidTransf.params().s1 * (dRdv(0, 2) * this->ssurf.S(0, i) + dRdv(3, 2) * this->ssurf.S(1, i) + dRdv(6, 2) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, x.rigidTransf.params().s2 * (dRdv(1, 0) * this->ssurf.S(0, i) + dRdv(4, 0) * this->ssurf.S(1, i) + dRdv(7, 0) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, x.rigidTransf.params().s2 * (dRdv(1, 1) * this->ssurf.S(0, i) + dRdv(4, 1) * this->ssurf.S(1, i) + dRdv(7, 1) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, x.rigidTransf.params().s2 * (dRdv(1, 2) * this->ssurf.S(0, i) + dRdv(4, 2) * this->ssurf.S(1, i) + dRdv(7, 2) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, x.rigidTransf.params().s3 * (dRdv(2, 0) * this->ssurf.S(0, i) + dRdv(5, 0) * this->ssurf.S(1, i) + dRdv(8, 0) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, x.rigidTransf.params().s3 * (dRdv(2, 1) * this->ssurf.S(0, i) + dRdv(5, 1) * this->ssurf.S(1, i) + dRdv(8, 1) * this->ssurf.S(2, i)));
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, x.rigidTransf.params().s3 * (dRdv(2, 2) * this->ssurf.S(0, i) + dRdv(5, 2) * this->ssurf.S(1, i) + dRdv(8, 2) * this->ssurf.S(2, i)));
 		}
 	}
 
@@ -406,26 +406,44 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 
+		// Get rotation matrix
+		Matrix4f R = x.rigidTransf.rotation();
+
 		for (int i = 0; i < this->ssurf.dSudX.size(); ++i) {
 			// Normals
 			auto const& tripletSu = this->ssurf.dSudX[i];
 			auto const& tripletSv = this->ssurf.dSvdX[i];
-			Vector3 normal = this->ssurf.dSdu.col(tripletSu.row()).cross(this->ssurf.dSdv.col(tripletSu.row()));
+			Vector3 dSduR(this->ssurf.dSdu.col(tripletSu.row()));
+			Vector3 dSdvR(this->ssurf.dSdv.col(tripletSu.row()));
+			Vector3 normal = dSduR.cross(dSdvR);
 			float nnorm = normal.norm();
 			normal.normalize();
+			normal = Vector3(R(0, 0) * normal(0) + R(0, 1) * normal(1) + R(0, 2) * normal(2),
+				R(1, 0) * normal(0) + R(1, 1) * normal(1) + R(1, 2) * normal(2),
+				R(2, 0) * normal(0) + R(2, 1) * normal(1) + R(2, 2) * normal(2));
 
 			Vector3 dndx, dndy, dndz;
-			dndx << 0.0f, this->ssurf.dSdu(2, tripletSu.row()) * tripletSv.value() - this->ssurf.dSdv(2, tripletSu.row()) * tripletSu.value(),
-				this->ssurf.dSdv(1, tripletSu.row()) * tripletSu.value() - this->ssurf.dSdu(1, tripletSu.row()) * tripletSv.value();
-			dndy << this->ssurf.dSdv(2, tripletSu.row()) * tripletSu.value() - this->ssurf.dSdu(2, tripletSu.row()) * tripletSv.value(),
+			dndx << 0.0f, dSduR(2) * tripletSv.value() - dSdvR(2) * tripletSu.value(),
+				dSdvR(1) * tripletSu.value() - dSduR(1) * tripletSv.value();
+			dndy << dSdvR(2) * tripletSu.value() - dSduR(2) * tripletSv.value(),
 				0.0f,
-				this->ssurf.dSdu(0, tripletSu.row()) * tripletSv.value() - this->ssurf.dSdv(0, tripletSu.row()) * tripletSu.value();
-			dndz << this->ssurf.dSdu(1, tripletSu.row()) * tripletSv.value() - this->ssurf.dSdv(1, tripletSu.row()) * tripletSu.value(),
-				this->ssurf.dSdv(0, tripletSu.row()) * tripletSu.value() - this->ssurf.dSdu(0, tripletSu.row()) * tripletSv.value(),
+				dSduR(0) * tripletSv.value() - dSdvR(0) * tripletSu.value();
+			dndz << dSduR(1) * tripletSv.value() - dSdvR(1) * tripletSu.value(),
+				dSdvR(0) * tripletSu.value() - dSduR(0) * tripletSv.value(),
 				0.0f;
+			dndx = Vector3(R(0, 0) * dndx(0) + R(0, 1) * dndx(1) + R(0, 2) * dndx(2),
+				R(1, 0) * dndx(0) + R(1, 1) * dndx(1) + R(1, 2) * dndx(2),
+				R(2, 0) * dndx(0) + R(2, 1) * dndx(1) + R(2, 2) * dndx(2));
+			dndy = Vector3(R(0, 0) * dndy(0) + R(0, 1) * dndy(1) + R(0, 2) * dndy(2),
+				R(1, 0) * dndy(0) + R(1, 1) * dndy(1) + R(1, 2) * dndy(2),
+				R(2, 0) * dndy(0) + R(2, 1) * dndy(1) + R(2, 2) * dndy(2));
+			dndz = Vector3(R(0, 0) * dndz(0) + R(0, 1) * dndz(1) + R(0, 2) * dndz(2),
+				R(1, 0) * dndz(0) + R(1, 1) * dndz(1) + R(1, 2) * dndz(2),
+				R(2, 0) * dndz(0) + R(2, 1) * dndz(1) + R(2, 2) * dndz(2));
 			float ndndx = normal.transpose() * dndx;
 			float ndndy = normal.transpose() * dndy;
 			float ndndz = normal.transpose() * dndz;
+			
 
 			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(0) - normal(0) * ndndx));
 			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(1) - normal(1) * ndndx));
@@ -442,16 +460,17 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	void dE_normal_d_uv(const InputType& x,
 		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
 		// Evaluate surface at x
-		this->evaluateSubdivisionSurface(x, this->ssurf);
+		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
+		//this->evaluateSubdivisionSurface(x, this->ssurf);
 
 		for (int i = 0; i < this->nDataPoints(); i++) {
 			// Normals
-			Vector3 normal = this->ssurf.dSdu.col(i).cross(this->ssurf.dSdv.col(i));
+			Vector3 normal = this->ssurf_r.dSdu.col(i).cross(this->ssurf_r.dSdv.col(i));
 			float nnorm = normal.norm();
 			normal.normalize();
 
-			Vector3 dndu = this->ssurf.dSduu.col(i).cross(this->ssurf.dSdv.col(i)) + this->ssurf.dSdu.col(i).cross(this->ssurf.dSduv.col(i));
-			Vector3 dndv = this->ssurf.dSduv.col(i).cross(this->ssurf.dSdv.col(i)) + this->ssurf.dSdu.col(i).cross(this->ssurf.dSdvv.col(i));
+			Vector3 dndu = this->ssurf_r.dSduu.col(i).cross(this->ssurf_r.dSdv.col(i)) + this->ssurf_r.dSdu.col(i).cross(this->ssurf_r.dSduv.col(i));
+			Vector3 dndv = this->ssurf_r.dSduv.col(i).cross(this->ssurf_r.dSdv.col(i)) + this->ssurf_r.dSdu.col(i).cross(this->ssurf_r.dSdvv.col(i));
 			float ndndu = normal.transpose() * dndu;
 			float ndndv = normal.transpose() * dndv;
 
@@ -486,6 +505,16 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			Vector3 normal = this->ssurf.dSdu.col(i).cross(this->ssurf.dSdv.col(i));
 			normal.normalize();
 
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, this->eWeights.normals * (dRdv(0, 0) * normal(0) + dRdv(3, 0) * normal(1) + dRdv(6, 0) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, this->eWeights.normals * (dRdv(0, 1) * normal(0) + dRdv(3, 1) * normal(1) + dRdv(6, 1) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, this->eWeights.normals * (dRdv(0, 2) * normal(0) + dRdv(3, 2) * normal(1) + dRdv(6, 2) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, this->eWeights.normals * (dRdv(1, 0) * normal(0) + dRdv(4, 0) * normal(1) + dRdv(7, 0) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, this->eWeights.normals * (dRdv(1, 1) * normal(0) + dRdv(4, 1) * normal(1) + dRdv(7, 1) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, this->eWeights.normals * (dRdv(1, 2) * normal(0) + dRdv(4, 2) * normal(1) + dRdv(7, 2) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, this->eWeights.normals * (dRdv(2, 0) * normal(0) + dRdv(5, 0) * normal(1) + dRdv(8, 0) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, this->eWeights.normals * (dRdv(2, 1) * normal(0) + dRdv(5, 1) * normal(1) + dRdv(8, 1) * normal(2)));
+			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, this->eWeights.normals * (dRdv(2, 2) * normal(0) + dRdv(5, 2) * normal(1) + dRdv(8, 2) * normal(2)));
+/*
 			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 0) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(6, 0) * normal(2)));
 			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 1) * normal(1)
@@ -503,7 +532,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 1) * normal(1)
 				+ x.rigidTransf.params().s3 *  dRdv(8, 1) * normal(2)));
 			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 2) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(8, 2) * normal(2)));
+				+ x.rigidTransf.params().s3 * dRdv(8, 2) * normal(2)));*/
 		}
 	}
 
@@ -512,15 +541,24 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// Evaluate subdivision surface at control points
 		SubdivSurface ssurf_cs;
 		ssurf_cs.init(this->nDataConstraints());
-		this->evaluateSubdivisionSurfaceAtConstraintPoints(x, cs, ssurf_cs, x.rigidTransf.rotation());
+		this->evaluateSubdivisionSurfaceAtConstraintPoints(x, cs, ssurf_cs);
+
+		// Get rotation matrix
+		Matrix4f R = x.rigidTransf.rotation();
 
 		for (int i = 0; i < ssurf_cs.dSdX.size(); ++i) {
 			auto const& triplet = ssurf_cs.dSdX[i];
 			assert(0 <= triplet.row() && triplet.row() < this->nDataPoints());
 			assert(0 <= triplet.col() && triplet.col() < mesh.num_vertices);
-			jvals.add(rowOffset + triplet.row() * 3 + 0, colBase + triplet.col() * 3 + 0, this->eWeights.constraints * x.rigidTransf.params().s1 * triplet.value());
-			jvals.add(rowOffset + triplet.row() * 3 + 1, colBase + triplet.col() * 3 + 1, this->eWeights.constraints * x.rigidTransf.params().s2 * triplet.value());
-			jvals.add(rowOffset + triplet.row() * 3 + 2, colBase + triplet.col() * 3 + 2, this->eWeights.constraints * x.rigidTransf.params().s3 * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 0, colBase + triplet.col() * 3 + 0, this->eWeights.constraints * x.rigidTransf.params().s1 * R(0, 0) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 1, colBase + triplet.col() * 3 + 0, this->eWeights.constraints * x.rigidTransf.params().s2 * R(1, 0) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 2, colBase + triplet.col() * 3 + 0, this->eWeights.constraints * x.rigidTransf.params().s3 * R(2, 0) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 0, colBase + triplet.col() * 3 + 1, this->eWeights.constraints * x.rigidTransf.params().s1 * R(0, 1) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 1, colBase + triplet.col() * 3 + 1, this->eWeights.constraints * x.rigidTransf.params().s2 * R(1, 1) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 2, colBase + triplet.col() * 3 + 1, this->eWeights.constraints * x.rigidTransf.params().s3 * R(2, 1) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 0, colBase + triplet.col() * 3 + 2, this->eWeights.constraints * x.rigidTransf.params().s1 * R(0, 2) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 1, colBase + triplet.col() * 3 + 2, this->eWeights.constraints * x.rigidTransf.params().s2 * R(1, 2) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * 3 + 2, colBase + triplet.col() * 3 + 2, this->eWeights.constraints * x.rigidTransf.params().s3 * R(2, 2) * triplet.value());
 		}
 	}
 
@@ -554,24 +592,15 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			jvals.add(rowOffset + i * 3 + 1, s_base + 1, this->eWeights.constraints * ssurf_cs_r.S(1, i));
 			jvals.add(rowOffset + i * 3 + 2, s_base + 2, this->eWeights.constraints * ssurf_cs_r.S(2, i));
 
-			jvals.add(rowOffset + i * 3 + 0, r_base + 0, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(0, 0) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 0) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(6, 0) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 0, r_base + 1, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(0, 1) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 1) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(6, 1) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 0, r_base + 2, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(0, 2) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(3, 2) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 *  dRdv(6, 2) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 1, r_base + 0, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(1, 0) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 0) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(7, 0) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 1, r_base + 1, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(1, 1) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 1) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(7, 1) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 1, r_base + 2, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(1, 2) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(4, 2) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(7, 2) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 2, r_base + 0, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(2, 0) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 0) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(8, 0) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 2, r_base + 1, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(2, 1) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 1) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(8, 1) * ssurf_cs.S(2, i)));
-			jvals.add(rowOffset + i * 3 + 2, r_base + 2, this->eWeights.constraints * (x.rigidTransf.params().s1 * dRdv(2, 2) * ssurf_cs.S(0, i) + x.rigidTransf.params().s2 * dRdv(5, 2) * ssurf_cs.S(1, i)
-				+ x.rigidTransf.params().s3 * dRdv(8, 2) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 0, r_base + 0, this->eWeights.constraints * x.rigidTransf.params().s1 * (dRdv(0, 0) * ssurf_cs.S(0, i) + dRdv(3, 0) * ssurf_cs.S(1, i) + dRdv(6, 0) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 0, r_base + 1, this->eWeights.constraints * x.rigidTransf.params().s1 * (dRdv(0, 1) * ssurf_cs.S(0, i) + dRdv(3, 1) * ssurf_cs.S(1, i) + dRdv(6, 1) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 0, r_base + 2, this->eWeights.constraints * x.rigidTransf.params().s1 * (dRdv(0, 2) * ssurf_cs.S(0, i) + dRdv(3, 2) * ssurf_cs.S(1, i) + dRdv(6, 2) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 1, r_base + 0, this->eWeights.constraints * x.rigidTransf.params().s2 * (dRdv(1, 0) * ssurf_cs.S(0, i) + dRdv(4, 0) * ssurf_cs.S(1, i) + dRdv(7, 0) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 1, r_base + 1, this->eWeights.constraints * x.rigidTransf.params().s2 * (dRdv(1, 1) * ssurf_cs.S(0, i) + dRdv(4, 1) * ssurf_cs.S(1, i) + dRdv(7, 1) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 1, r_base + 2, this->eWeights.constraints * x.rigidTransf.params().s2 * (dRdv(1, 2) * ssurf_cs.S(0, i) + dRdv(4, 2) * ssurf_cs.S(1, i) + dRdv(7, 2) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 2, r_base + 0, this->eWeights.constraints * x.rigidTransf.params().s3 * (dRdv(2, 0) * ssurf_cs.S(0, i) + dRdv(5, 0) * ssurf_cs.S(1, i) + dRdv(8, 0) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 2, r_base + 1, this->eWeights.constraints * x.rigidTransf.params().s3 * (dRdv(2, 1) * ssurf_cs.S(0, i) + dRdv(5, 1) * ssurf_cs.S(1, i) + dRdv(8, 1) * ssurf_cs.S(2, i)));
+			jvals.add(rowOffset + i * 3 + 2, r_base + 2, this->eWeights.constraints * x.rigidTransf.params().s3 * (dRdv(2, 2) * ssurf_cs.S(0, i) + dRdv(5, 2) * ssurf_cs.S(1, i) + dRdv(8, 2) * ssurf_cs.S(2, i)));
 		}
 	}
 
@@ -586,12 +615,31 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		// Finite-difference derivatives would however compute some rather small off-diagonal values there
 		tpe = tpe.sqrt();
 		for (int i = 0; i < tpe.rows(); i++) {
-			jvals.add(rowOffset + i * 3 + 0, colBase + i * 3 + 0, this->eWeights.thinplate * tpe(i, i));
-			jvals.add(rowOffset + i * 3 + 1, colBase + i * 3 + 1, this->eWeights.thinplate * tpe(i, i));
-			jvals.add(rowOffset + i * 3 + 2, colBase + i * 3 + 2, this->eWeights.thinplate * tpe(i, i));
+			for (int j = 0; j < tpe.cols(); j++) {
+				jvals.add(rowOffset + i * 3 + 0, colBase + j * 3 + 0, this->eWeights.thinplate * x.rigidTransf.params().s1 * tpe(i, j));
+				jvals.add(rowOffset + i * 3 + 1, colBase + j * 3 + 1, this->eWeights.thinplate * x.rigidTransf.params().s2 * tpe(i, j));
+				jvals.add(rowOffset + i * 3 + 2, colBase + j * 3 + 2, this->eWeights.thinplate * x.rigidTransf.params().s3 * tpe(i, j));
+			}
 		}
 	}
 
+	void dE_thinplate_d_rst(const InputType& x,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		// Compute thin plate energy matrix
+		MatrixXX tpe;
+		this->computeThinPlateMatrix(x, tpe);
+
+		Eigen::Index t_base = colBase + 0;
+		Eigen::Index s_base = colBase + 3;
+		Eigen::Index r_base = colBase + 6;
+
+		tpe = tpe.sqrt() * x.control_vertices.transpose();
+		for (int i = 0; i < tpe.rows(); i++) {
+			jvals.add(rowOffset + i * 3 + 0, s_base + 0, this->eWeights.thinplate * tpe(i, 0));
+			jvals.add(rowOffset + i * 3 + 1, s_base + 1, this->eWeights.thinplate * tpe(i, 1));
+			jvals.add(rowOffset + i * 3 + 2, s_base + 2, this->eWeights.thinplate * tpe(i, 2));
+		}
+	}
 	/************ UPDATES ************/
 	void inc_X(InputType* x, StepType const& p, const Eigen::Index colBase) {
 		// Increment control vertices

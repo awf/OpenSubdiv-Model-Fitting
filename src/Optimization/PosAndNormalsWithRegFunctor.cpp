@@ -12,7 +12,7 @@ PosAndNormalsWithRegFunctor::PosAndNormalsWithRegFunctor(const Matrix3X& data_po
 		data_normals(data_normals) {
 
 	// Weight the energy terms
-	this->eWeights.thinplate = 0.5;
+	this->eWeights.thinplate = 0.25;
 	this->eWeights.normals = 0.1;
 	this->eWeights.constraints = 5.0;
 }
@@ -48,6 +48,7 @@ void PosAndNormalsWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArra
 	this->dE_pos_d_rst(x, jvals, rst_base, 0);
 	this->dE_normal_d_rst(x, jvals, rst_base, 3);
 	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
+	this->dE_thinplate_d_rst(x, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
 }
 
 void PosAndNormalsWithRegFunctor::increment_in_place_impl(InputType* x, StepType const& p) {
