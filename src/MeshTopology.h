@@ -9,7 +9,7 @@ struct MeshTopology {
 	Eigen::Array<int, 4, Eigen::Dynamic> quads;
 	Eigen::Array<int, 4, Eigen::Dynamic> face_adj;
 
-	const unsigned int MaxNeighbors = 4;
+	static const unsigned int MaxNeighbors = 4;
 
 	size_t  num_vertices;
 	size_t  num_faces() const { 
@@ -20,6 +20,8 @@ struct MeshTopology {
 
 	static Eigen::Vector3f computeBarycenter(const Matrix3X &vertices);
 	
+	bool isAdjacentFace(const int f1, const int f2) const;
+
 	MeshTopology();
 	MeshTopology(const MeshTopology &mesh);
 	

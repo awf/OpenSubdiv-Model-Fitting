@@ -42,7 +42,9 @@ void makeFromPLYModel(MeshTopology* mesh, Matrix3X* verts, const PLYParser::Mode
 	// Initialize faces
 	mesh->quads.resize(4, model.numFaces());
 	for (int i = 0; i < model.numFaces(); i++) {
-		mesh->quads.col(i) << model.faces(i, 0), model.faces(i, 1), model.faces(i, 2), model.faces(i, 3);
+		// Order of those points matters to the optimization process!!!
+		// See mesh walking implementation, it is indexing fixed  adjacency indices!!! (FixMe?)
+		mesh->quads.col(i) << model.faces(i, 3), model.faces(i, 2), model.faces(i, 1), model.faces(i, 0);
 	}
 	mesh->update_adjacencies();
 }
@@ -107,4 +109,14 @@ Eigen::Vector3f MeshTopology::computeBarycenter(const Matrix3X &vertices) {
 		vertices.col(2).sum() / vertices.rows();
 
 	return b;
+}
+
+bool MeshTopology::isAdjacentFace(const int f1, const int f2) const {
+	for (size_t l = 0; l < MeshTopology::MaxNeighbors; l++) {
+		if (quads(l, f1) == f2) {
+			return true;
+		}
+	}
+
+	return false;
 }
