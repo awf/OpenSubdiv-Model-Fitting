@@ -31,13 +31,23 @@ using namespace Eigen;
 
 void logmesh(log3d& log, MeshTopology const& mesh, Matrix3X const& vertices) {
 	Matrix3Xi tris(3, mesh.quads.cols() * 2);
+	
 	tris.block(0, 0, 1, mesh.quads.cols()) = mesh.quads.row(0);
 	tris.block(1, 0, 1, mesh.quads.cols()) = mesh.quads.row(2);
 	tris.block(2, 0, 1, mesh.quads.cols()) = mesh.quads.row(1);
 	tris.block(0, mesh.quads.cols(), 1, mesh.quads.cols()) = mesh.quads.row(0);
 	tris.block(1, mesh.quads.cols(), 1, mesh.quads.cols()) = mesh.quads.row(3);
 	tris.block(2, mesh.quads.cols(), 1, mesh.quads.cols()) = mesh.quads.row(2);
+	/*
+	tris.block(0, 0, 1, mesh.quads.cols()) = mesh.quads.row(3);
+	tris.block(1, 0, 1, mesh.quads.cols()) = mesh.quads.row(1);
+	tris.block(2, 0, 1, mesh.quads.cols()) = mesh.quads.row(2);
+	tris.block(0, mesh.quads.cols(), 1, mesh.quads.cols()) = mesh.quads.row(3);
+	tris.block(1, mesh.quads.cols(), 1, mesh.quads.cols()) = mesh.quads.row(0);
+	tris.block(2, mesh.quads.cols(), 1, mesh.quads.cols()) = mesh.quads.row(1);
+	*/
 	log.mesh(tris, vertices);
+	
 }
 
 void logsubdivmesh(log3d& log, MeshTopology const& mesh, Matrix3X const& vertices) {
@@ -171,7 +181,7 @@ int main() {
 				fpjParse.project().images[0].silhouettePoints[3].row(i), t[j]);
 			data(0, nParamVals * i + j) = pt(0);
 			data(1, nParamVals * i + j) = pt(1);
-			data(2, nParamVals * i + j) = dist(gen) * 0.125 - 0.125/2.0;
+			data(2, nParamVals * i + j) = 0.0f;// dist(gen) * 0.125 - 0.125 / 2.0;
 			
 			Eigen::Vector2f n = BezierPatch::evaluateNormalAt(fpjParse.project().images[0].silhouettePoints[0].row(i),
 				fpjParse.project().images[0].silhouettePoints[1].row(i),
@@ -224,9 +234,8 @@ int main() {
 	log.color(0.0, 0.0, 1.0);
 	log.position(log.CreateSphere(0, 0.05), barycenter(0), barycenter(1), barycenter(2));
 	params.rigidTransf.setTranslation(barycenter(0), barycenter(1), barycenter(2));
-	params.rigidTransf.setRotation(fpjParse.project().images[0].rigidTransf.params().r1,
-		fpjParse.project().images[0].rigidTransf.params().r2,
-		fpjParse.project().images[0].rigidTransf.params().r3);
+	//params.rigidTransf.setRotation(fpjParse.project().images[0].rigidTransf.params().r1,
+	//	fpjParse.project().images[0].rigidTransf.params().r2,
 	//params.rigidTransf.setScaling(0.5, 0.5, 0.5);
 	//params.rigidTransf.setScaling(1.0, 10.0, 5.0);
 	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1 * 2.0,
@@ -262,7 +271,7 @@ int main() {
 	mesh = mesh1;*/
 
 	OptimizationFunctor::DataConstraints constraints;
-	constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
+	//constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
 	OptimizationFunctor functor(data, mesh, constraints);
 	//OptimizationFunctor functor(data, dataNormals, mesh, constraints);
 	
@@ -281,7 +290,7 @@ int main() {
 			unsigned int num_tsr = 9;
 			unsigned int num_xyz = mesh.num_vertices * 3;
 			unsigned int num_res_p = nDataPoints * 3;
-			unsigned int num_res_n = nDataPoints * 3;
+			unsigned int num_res_n = nDataPoints;// nDataPoints * 3;
 			unsigned int num_res_c = constraints.size() * 3;
 			unsigned int num_res_tp = num_xyz;
 			if (diff > 0) {
@@ -308,8 +317,8 @@ int main() {
 				ofs2.close();
 				*/
 
-				Logger::instance()->logMatrixCSV(J_fd.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz), "j_pnxyz_fd.csv");
-				Logger::instance()->logMatrixCSV(J.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz), "j_pnxyz_my.csv");
+				Logger::instance()->logMatrixCSV(J_fd.toDense().block(0, 0, num_res_p + num_res_n, num_uv), "j_pnuv_fd.csv");
+				Logger::instance()->logMatrixCSV(J.toDense().block(0, 0, num_res_p + num_res_n, num_uv), "j_pnuv_my.csv");
 				//Logger::instance()->logMatrixCSV(J_fd.toDense().block(num_res_p + num_res_c, num_uv, num_res_tp, num_tsr + num_xyz), "j_tp_fd.csv");
 				//Logger::instance()->logMatrixCSV(J.toDense().block(num_res_p + num_res_c, num_uv, num_res_tp, num_tsr + num_xyz), "j_tp_my.csv");
 				

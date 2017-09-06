@@ -44,7 +44,8 @@ void makeFromPLYModel(MeshTopology* mesh, Matrix3X* verts, const PLYParser::Mode
 	for (int i = 0; i < model.numFaces(); i++) {
 		// Order of those points matters to the optimization process!!!
 		// See mesh walking implementation, it is indexing fixed  adjacency indices!!! (FixMe?)
-		mesh->quads.col(i) << model.faces(i, 3), model.faces(i, 2), model.faces(i, 1), model.faces(i, 0);
+		mesh->quads.col(i) << model.faces(i, 0), model.faces(i, 1), model.faces(i, 2), model.faces(i, 3);
+		//mesh->quads.col(i) << model.faces(i, 3), model.faces(i, 2), model.faces(i, 1), model.faces(i, 0);
 	}
 	mesh->update_adjacencies();
 }

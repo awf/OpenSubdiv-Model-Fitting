@@ -12,7 +12,7 @@ PosAndNormalsWithRegFunctor::PosAndNormalsWithRegFunctor(const Matrix3X& data_po
 		data_normals(data_normals) {
 
 	// Weight the energy terms
-	this->eWeights.thinplate = 0.25;
+	this->eWeights.thinplate = 0.5;
 	this->eWeights.normals = 0.1;
 	this->eWeights.constraints = 5.0;
 }
@@ -20,8 +20,8 @@ PosAndNormalsWithRegFunctor::PosAndNormalsWithRegFunctor(const Matrix3X& data_po
 // Functor functions
 // 1. Evaluate the residuals at x
 void PosAndNormalsWithRegFunctor::f_impl(const InputType& x, ValueType& fvec) {
-	this->E_pos(x, data_points, fvec, 0);
-	this->E_normal(x, data_normals, fvec, 3);
+	this->E_pos(x, data_points, fvec, 0, 0);
+	this->E_normal(x, data_normals, fvec, 0, 3);
 	this->E_constraints(x, data_points, data_constraints, fvec, this->nDataPoints() * 3 + data_normals.cols() * 3);
 	this->E_thinplate(x, fvec, data_points.cols() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
 }
@@ -35,18 +35,18 @@ void PosAndNormalsWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArra
 
 	// Fill Jacobian columns.  
 	// 1. Derivatives wrt control vertices.
-	this->dE_pos_d_X(x, jvals, X_base, 0);
-	this->dE_normal_d_X(x, jvals, X_base, 3);
+	this->dE_pos_d_X(x, jvals, X_base, 0, 0);
+	this->dE_normal_d_X(x, jvals, X_base, 0, 3);
 	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
 	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
 
 	// 2. Derivatives wrt correspondences
-	this->dE_pos_d_uv(x, jvals, ubase, 0);
-	this->dE_normal_d_uv(x, jvals, ubase, 3);
+	this->dE_pos_d_uv(x, jvals, ubase, 0, 0);
+	this->dE_normal_d_uv(x, jvals, ubase, 0, 3);
 
 	// 3. Derivatives wrt transformation parameters
-	this->dE_pos_d_rst(x, jvals, rst_base, 0);
-	this->dE_normal_d_rst(x, jvals, rst_base, 3);
+	this->dE_pos_d_rst(x, jvals, rst_base, 0, 0);
+	this->dE_normal_d_rst(x, jvals, rst_base, 0, 3);
 	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
 	this->dE_thinplate_d_rst(x, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
 }

@@ -13,6 +13,8 @@
 #define EIGEN_BLOCK_SPARSE_QR_H
 
 #include <algorithm>
+#include <ctime>
+#include "../Logger.h"
 
 namespace Eigen {
   
@@ -61,6 +63,7 @@ namespace Eigen {
   * \implsparsesolverconcept
   *
   */
+
 template<typename _MatrixType, typename _BlockQRSolverLeft, typename _BlockQRSolverRight>
 class BlockSparseQR_Ext : public SparseSolverBase<BlockSparseQR_Ext<_MatrixType,_BlockQRSolverLeft,_BlockQRSolverRight> >
 {
@@ -260,7 +263,7 @@ class BlockSparseQR_Ext : public SparseSolverBase<BlockSparseQR_Ext<_MatrixType,
       this->m_isQSorted = true;
     }
 
-    void setBlockParams(Index blockRows, Index blockCols) {
+    void setSparseBlockParams(Index blockRows, Index blockCols) {
 		m_blockRows = blockRows;
         m_blockCols = blockCols;
     }
@@ -275,6 +278,7 @@ class BlockSparseQR_Ext : public SparseSolverBase<BlockSparseQR_Ext<_MatrixType,
     mutable ComputationInfo m_info;
     std::string m_lastError;
 
+	MatrixType m_leftQ;				// Q for the left solver (assuming it's sparse enough) 
     MatrixRType m_R;                // The triangular factor matrix
     ScalarVector m_hcoeffs;         // The Householder coefficients
     PermutationType m_pivotperm;    // The permutation for rank revealing
@@ -351,9 +355,13 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
 
     /// A = Q^t * J2
     /// n x m2
-    // '(Eigen::SparseQRMatrixQTransposeReturnType<SparseQRType>, const Eigen::Block<const Derived,-1,-1,true>)'
-    MatrixType XX = matBlock.rightCols(m2); // awf fixme this needs to be inlined in the next line
-	MatrixType A = m_leftSolver.matrixQ().transpose() * XX;
+
+	// '(Eigen::SparseQRMatrixQTransposeReturnType<SparseQRType>, const Eigen::Block<const Derived,-1,-1,true>)'
+	MatrixType XX = matBlock.rightCols(m2); // awf fixme this needs to be inlined in the next line
+
+	//clock_t begin = clock();
+	this->m_leftQ = m_leftSolver.matrixQ();
+	MatrixType A = this->m_leftQ.transpose() * XX;// *matBlock.rightCols(m2);
 
     /// A = | Atop |      m1 x m2
     ///     | Abot |    n-m1 x m2
@@ -404,9 +412,6 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
           triplets.add_if_nonzero(m1 + i, m1+j, R2(i, j));
       
 	  m_R.setFromTriplets(triplets.begin(), triplets.end());
-
-
-      // std::cout << triplets.size() << " = " << initial_size << std::endl;
     }
 
     // fill cols permutation
@@ -441,8 +446,7 @@ struct BlockSparseQR_Ext_QProduct : ReturnByValue<BlockSparseQR_Ext_QProduct<Spa
   template<typename DesType>
   void evalTo(DesType& res) const
   {
-	  Index n = m_qr.rows();// -m_blockRows;
-    //Index m1_plus_m2 = m_qr.cols();
+	 Index n = m_qr.rows();
     Index m1 = m_qr.m_blockCols;
 	Index n1 = m_qr.m_blockRows;
 
@@ -456,11 +460,9 @@ struct BlockSparseQR_Ext_QProduct : ReturnByValue<BlockSparseQR_Ext_QProduct<Spa
 
       /// Q v = | I 0   | * Q1' * v   = | I 0   | * [ Q1tv1 ]  = [ Q1tv1       ]
       ///       | 0 Q2' |               | 0 Q2' |   [ Q1tv2 ]    [ Q2' * Q1tv2 ]    
-
+		
 	  res = m_other;
-	  res.topRows(n1) = m_qr.m_leftSolver.matrixQ().transpose() * m_other.topRows(n1);
-	  //res = m_qr.m_leftSolver.matrixQ().transpose() * m_other.topRows(m1);
-      // res.topRows(m1) = Q1tv.topRows(m1);
+	  res.topRows(n1) = m_qr.m_leftQ.transpose() * m_other.topRows(n1); // m_qr.m_leftSolver.matrixQ().transpose() * tmp;//m_other.topRows(n1);
 	  res.bottomRows(n - m1) = m_qr.m_rightSolver.matrixQ().transpose() * res.bottomRows(n - m1);
     }
     else
@@ -471,11 +473,11 @@ struct BlockSparseQR_Ext_QProduct : ReturnByValue<BlockSparseQR_Ext_QProduct<Spa
 
       /// Q v = Q1 * | I 0  | * | v1 | =  Q1 * | v1      | 
       ///            | 0 Q2 |   | v2 |         | Q2 * v2 | 
-
+		
 	  res = m_other;
       DesType Q2v2 = m_other.bottomRows(n - m1);
 	  res.bottomRows(n - m1) = m_qr.m_rightSolver.matrixQ() * Q2v2;
-	  res = (m_qr.m_leftSolver.matrixQ() * res).eval();
+	  res = (m_qr.m_leftQ * res).eval();
     }
   }
 

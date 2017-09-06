@@ -6,6 +6,8 @@
 
 #include "../Eigen_ext/eigen_extras.h"
 #include "../Eigen_ext/BlockSparseQR_Ext.h"
+#include "../Eigen_ext/BlockDiagonalSparseQR_Ext.h"
+#include "../Eigen_ext/SparseSubblockQR_Ext.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -21,8 +23,8 @@
 using namespace Eigen;
 
 template <int BlkRows, int BlkCols>
-struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
-	typedef Eigen::SparseFunctor<Scalar> Base;
+struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
+	typedef Eigen::SparseFunctor<Scalar, int> Base;
 	typedef typename Base::JacobianType JacobianType;
 
 	// Variables for optimization live in InputType
@@ -33,6 +35,99 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 
 		Index nVertices() const { return control_vertices.cols(); }
 	};
+
+	double uv_distance(const Matrix3X& X, const SurfacePoint &uv1, const SurfacePoint &uv2, Eigen::Vector4d* dist_duv = 0) {
+		double thresh = sqrt(3.0) / 4.0;
+
+		if (uv1.face == uv2.face) {
+			double dist = (uv1.u - uv2.u).norm();
+			if (dist_duv) {
+				if (dist > thresh) {
+					*dist_duv = Eigen::Vector4d::Zero();
+				} else {
+					*dist_duv = Eigen::Vector4d::Ones();
+				}
+			}
+			return std::min(dist, thresh);
+		} else if (this->mesh.isAdjacentFace(uv1.face, uv2.face)) {
+			Scalar u11, u12, u21, u22;
+			Scalar du1, du2;
+			if (uv2.face == mesh.face_adj(3, uv1.face)) {
+				u11 = uv1.u(0);
+				u21 = 1.0 - uv2.u(0);
+				du1 = u11 * (uv2.u(1) - uv1.u(1)) / (u11 + u21);
+				u12 = uv1.u(1) + du1;
+				u22 = uv2.u(1) - (uv2.u(1) - uv1.u(1)) + du1;
+			} else if (uv2.face == mesh.face_adj(1, uv1.face)) {
+				u11 = 1.0 - uv1.u(0);
+				u21 = uv2.u(0);
+				du1 = u11 * (uv2.u(1) - uv1.u(1)) / (u11 + u21);
+				u12 = uv1.u(1) + du1;
+				u22 = uv2.u(1) - (uv2.u(1) - uv1.u(1)) + du1;
+			} else if (uv2.face == mesh.face_adj(0, uv1.face)) {
+				u12 = uv1.u(1);
+				u22 = 1.0 - uv2.u(1);
+				du2 = u12 * (uv2.u(0) - uv1.u(0)) / (u12 + u22);
+				u11 = uv1.u(0) + du2;
+				u21 = uv2.u(0) - (uv2.u(0) - uv1.u(0)) + du2;
+			} else if (uv2.face == mesh.face_adj(2, uv1.face)) {
+				u12 = 1.0 - uv1.u(1);
+				u22 = uv2.u(1);
+				du2 = u12 * (uv2.u(0) - uv1.u(0)) / (u12 + u22);
+				u11 = uv1.u(0) + du2;
+				u21 = uv2.u(0) - (uv2.u(0) - uv1.u(0)) + du2;
+			}
+
+			// Compute the local parametrization
+			std::vector<SurfacePoint> pts;
+			pts.push_back(uv1); pts.push_back(uv2);
+			Matrix3X S(3, 2);
+			Matrix3X Su(3, 2);
+			Matrix3X Sv(3, 2);
+			evaluator.evaluateSubdivSurface(X, pts, &S, 0, 0, 0, &Su, &Sv);
+
+			// Local parametrization for point uv1
+			Matrix32 Juv1; 
+			Juv1.col(0) << Su(0, 0), Su(1, 0), Su(2, 0);
+			Juv1.col(1) << Sv(0, 0), Sv(1, 0), Sv(2, 0);
+			Matrix22 Guv1 = Juv1.transpose() * Juv1;
+
+			// Local parametrization for point uv2
+			Matrix32 Juv2;
+			Juv2.col(0) << Su(0, 1), Su(1, 1), Su(2, 1);
+			Juv2.col(1) << Sv(0, 1), Sv(1, 1), Sv(2, 1);
+			Matrix22 Guv2 = Juv2.transpose() * Juv2;
+
+			// Compute partial distances using local parametrization in the tangent planes of uv1 and uv2 and sum them up
+			Vector2 uv1_c(u11, u12);
+			double dist1 = (uv1_c.transpose() * Guv1 * uv1.u).cast<double>();
+			Vector2 uv2_c(u21, u22);
+			double dist2 = (uv2_c.transpose() * Guv2 * uv2.u).cast<double>();
+			
+			if (dist_duv) {
+				if ((dist1 + dist2) > thresh) {
+					*dist_duv = Eigen::Vector4d::Zero();
+				}
+				else {
+					Vector2 uv1_c(1, 0);
+					(*dist_duv)(0) = (uv1_c.transpose() * Guv1 * uv1.u).cast<double>();
+					uv1_c = Vector2(0, 1);
+					(*dist_duv)(1) = (uv1_c.transpose() * Guv1 * uv1.u).cast<double>();
+					Vector2 uv2_c(1, 0);
+					(*dist_duv)(2) = (uv2_c.transpose() * Guv2 * uv2.u).cast<double>();
+					uv2_c = Vector2(0, 1);
+					(*dist_duv)(3) = (uv2_c.transpose() * Guv2 * uv2.u).cast<double>();
+				}
+			}
+
+			return std::min(dist1 + dist2, thresh);
+		} else { 
+			if (dist_duv) {
+				*dist_duv = Eigen::Vector4d::Zero();
+			}
+			return thresh;
+		}
+	}
 
 	struct DataConstraint {
 		Eigen::Index cvIdx;	// Model control-vertex index
@@ -144,7 +239,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 
 	// 5. Describe the QR solvers
 	// For generic Jacobian, one might use this Dense QR solver.
-	typedef SparseQR<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
+	//typedef SparseQR<JacobianType, COLAMDOrdering<Eigen::Index> > GeneralQRSolver;
 
 	// But for optimal performance, declare QRSolver that understands the sparsity structure.
 	// Here it's block-diagonal LHS with dense RHS
@@ -160,7 +255,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	typedef ColPivHouseholderQR<Matrix<Scalar, BlkRows, BlkCols> > DenseQRSolverSmallBlock;
 
 	// QR for J1 is block diagonal
-	typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolverSmallBlock> LeftSuperBlockSolver;
+	typedef SparseQR<JacobianType, COLAMDOrdering<int> > SparseSuperblockSolver;
+	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseQRSolverSmallBlock> DiagonalSubblockSolver;
+	typedef SparseSubblockQR_Ext<JacobianType, DiagonalSubblockSolver, SparseSuperblockSolver> LeftSuperBlockSolver;
 
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
@@ -273,16 +370,17 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 	}
 	/************ ENERGIES, GRADIENTS and UPDATES ************/
 	/************ ENERGIES ************/
-	void E_pos(const InputType& x, const Matrix3X& data_points, ValueType& fvec, const Eigen::Index rowOffset) {
+	void E_pos(const InputType& x, const Matrix3X& data_points, ValueType& fvec, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Compute subdivision surface
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.translation() * x.rigidTransf.scaling() * x.rigidTransf.rotation(), this->ssurf_tsr);
 
 		for (int i = 0; i < this->nDataPoints(); i++) {
-			fvec.segment(i * this->rowStride + rowOffset, 3) = (this->ssurf_tsr.S.col(i) - data_points.col(i));
+			fvec.segment(rowOffset + i * this->rowStride + blockOffset, 3) = (this->ssurf_tsr.S.col(i) - data_points.col(i));
+			//fvec(i * this->rowStride + rowOffset + 2) = 0.0;
 		}
 	}
 
-	void E_normal(const InputType& x, const Matrix3X& data_normals, ValueType& fvec, const Eigen::Index rowOffset) {
+	void E_normal(const InputType& x, const Matrix3X& data_normals, ValueType& fvec, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
 		//this->evaluateSubdivisionSurface(x, this->ssurf);
@@ -292,7 +390,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			Vector3 normal = this->ssurf_r.dSdu.col(i).cross(this->ssurf_r.dSdv.col(i));
 			normal.normalize();
 			
-			fvec.segment(i * this->rowStride + rowOffset, 3) = this->eWeights.normals * (normal - data_normals.col(i));
+			fvec.segment(rowOffset + i * this->rowStride + blockOffset, 3) = this->eWeights.normals * (normal - data_normals.col(i));
 		}
 	}
 
@@ -322,9 +420,21 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		}
 	}
 
+	void E_continuity(const InputType& x, ValueType &fvec, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
+		// FixMe: For now considered only version that doesn't close the curve 
+		// (continuity of the last wrt first point not checked and the last term 0 -> makes the Jacobian sparsity structure easier)
+		for (int i = 0; i < this->nDataPoints(); i++) {
+			//std::cout << this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints())) << std::endl;
+			//fvec(rowOffset + i * this->rowStride + blockOffset) = this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()));
+			fvec(rowOffset + i + blockOffset) = this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()));
+		}
+		//fvec(rowOffset + (this->nDataPoints() - 1) * this->rowStride + blockOffset) = 0;
+		//fvec(rowOffset + (this->nDataPoints() - 1) + blockOffset) = 0;
+	}
+
 	/************ GRADIENTS ************/
 	void dE_pos_d_X(const InputType& x,
-		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 
@@ -335,35 +445,35 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			auto const& triplet = this->ssurf.dSdX[i];
 			assert(0 <= triplet.row() && triplet.row() < this->nDataPoints());
 			assert(0 <= triplet.col() && triplet.col() < mesh.num_vertices);
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s1 * R(0, 0) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s2 * R(1, 0) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s3 * R(2, 0) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s1 * R(0, 1) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s2 * R(1, 1) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s3 * R(2, 1) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 0, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s1 * R(0, 2) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 1, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s2 * R(1, 2) * triplet.value());
-			jvals.add(triplet.row() * this->rowStride + rowOffset + 2, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s3 * R(2, 2) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 0, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s1 * R(0, 0) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 1, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s2 * R(1, 0) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 2, colBase + triplet.col() * 3 + 0, x.rigidTransf.params().s3 * R(2, 0) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 0, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s1 * R(0, 1) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 1, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s2 * R(1, 1) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 2, colBase + triplet.col() * 3 + 1, x.rigidTransf.params().s3 * R(2, 1) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 0, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s1 * R(0, 2) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 1, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s2 * R(1, 2) * triplet.value());
+			jvals.add(rowOffset + triplet.row() * this->rowStride + blockOffset + 2, colBase + triplet.col() * 3 + 2, x.rigidTransf.params().s3 * R(2, 2) * triplet.value());
 		}
 	}
 
 	void dE_pos_d_uv(const InputType& x,
-		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
 
 		for (int i = 0; i < this->nDataPoints(); i++) {
-			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, x.rigidTransf.params().s1 * this->ssurf_r.dSdu(0, i));
-			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, x.rigidTransf.params().s2 * this->ssurf_r.dSdu(1, i));
-			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, x.rigidTransf.params().s3 * this->ssurf_r.dSdu(2, i));
-			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, x.rigidTransf.params().s1 * this->ssurf_r.dSdv(0, i));
-			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, x.rigidTransf.params().s2 * this->ssurf_r.dSdv(1, i));
-			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, x.rigidTransf.params().s3 * this->ssurf_r.dSdv(2, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 0, x.rigidTransf.params().s1 * this->ssurf_r.dSdu(0, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, colBase + 2 * i + 0, x.rigidTransf.params().s2 * this->ssurf_r.dSdu(1, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, colBase + 2 * i + 0, x.rigidTransf.params().s3 * this->ssurf_r.dSdu(2, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, x.rigidTransf.params().s1 * this->ssurf_r.dSdv(0, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, colBase + 2 * i + 1, x.rigidTransf.params().s2 * this->ssurf_r.dSdv(1, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, colBase + 2 * i + 1, x.rigidTransf.params().s3 * this->ssurf_r.dSdv(2, i));
 		}
 	}
 
 	void dE_pos_d_rst(const InputType& x,
-		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
@@ -381,28 +491,28 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 		RigidTransform::rotationToQuaternion(v, q, &dRdv);
 
 		for (int i = 0; i < this->nDataPoints(); i++) {
-			jvals.add(this->rowStride * i + rowOffset + 0, t_base + 0, 1.0);
-			jvals.add(this->rowStride * i + rowOffset + 1, t_base + 1, 1.0);
-			jvals.add(this->rowStride * i + rowOffset + 2, t_base + 2, 1.0);
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, t_base + 0, 1.0);
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, t_base + 1, 1.0);
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, t_base + 2, 1.0);
 
-			jvals.add(this->rowStride * i + rowOffset + 0, s_base + 0, this->ssurf_r.S(0, i));
-			jvals.add(this->rowStride * i + rowOffset + 1, s_base + 1, this->ssurf_r.S(1, i));
-			jvals.add(this->rowStride * i + rowOffset + 2, s_base + 2, this->ssurf_r.S(2, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, s_base + 0, this->ssurf_r.S(0, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, s_base + 1, this->ssurf_r.S(1, i));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, s_base + 2, this->ssurf_r.S(2, i));
 
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, x.rigidTransf.params().s1 * (dRdv(0, 0) * this->ssurf.S(0, i) + dRdv(3, 0) * this->ssurf.S(1, i) + dRdv(6, 0) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, x.rigidTransf.params().s1 * (dRdv(0, 1) * this->ssurf.S(0, i) + dRdv(3, 1) * this->ssurf.S(1, i) + dRdv(6, 1) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, x.rigidTransf.params().s1 * (dRdv(0, 2) * this->ssurf.S(0, i) + dRdv(3, 2) * this->ssurf.S(1, i) + dRdv(6, 2) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, x.rigidTransf.params().s2 * (dRdv(1, 0) * this->ssurf.S(0, i) + dRdv(4, 0) * this->ssurf.S(1, i) + dRdv(7, 0) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, x.rigidTransf.params().s2 * (dRdv(1, 1) * this->ssurf.S(0, i) + dRdv(4, 1) * this->ssurf.S(1, i) + dRdv(7, 1) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, x.rigidTransf.params().s2 * (dRdv(1, 2) * this->ssurf.S(0, i) + dRdv(4, 2) * this->ssurf.S(1, i) + dRdv(7, 2) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, x.rigidTransf.params().s3 * (dRdv(2, 0) * this->ssurf.S(0, i) + dRdv(5, 0) * this->ssurf.S(1, i) + dRdv(8, 0) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, x.rigidTransf.params().s3 * (dRdv(2, 1) * this->ssurf.S(0, i) + dRdv(5, 1) * this->ssurf.S(1, i) + dRdv(8, 1) * this->ssurf.S(2, i)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, x.rigidTransf.params().s3 * (dRdv(2, 2) * this->ssurf.S(0, i) + dRdv(5, 2) * this->ssurf.S(1, i) + dRdv(8, 2) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, r_base + 0, x.rigidTransf.params().s1 * (dRdv(0, 0) * this->ssurf.S(0, i) + dRdv(3, 0) * this->ssurf.S(1, i) + dRdv(6, 0) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, r_base + 1, x.rigidTransf.params().s1 * (dRdv(0, 1) * this->ssurf.S(0, i) + dRdv(3, 1) * this->ssurf.S(1, i) + dRdv(6, 1) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, r_base + 2, x.rigidTransf.params().s1 * (dRdv(0, 2) * this->ssurf.S(0, i) + dRdv(3, 2) * this->ssurf.S(1, i) + dRdv(6, 2) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, r_base + 0, x.rigidTransf.params().s2 * (dRdv(1, 0) * this->ssurf.S(0, i) + dRdv(4, 0) * this->ssurf.S(1, i) + dRdv(7, 0) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, r_base + 1, x.rigidTransf.params().s2 * (dRdv(1, 1) * this->ssurf.S(0, i) + dRdv(4, 1) * this->ssurf.S(1, i) + dRdv(7, 1) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, r_base + 2, x.rigidTransf.params().s2 * (dRdv(1, 2) * this->ssurf.S(0, i) + dRdv(4, 2) * this->ssurf.S(1, i) + dRdv(7, 2) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 0, x.rigidTransf.params().s3 * (dRdv(2, 0) * this->ssurf.S(0, i) + dRdv(5, 0) * this->ssurf.S(1, i) + dRdv(8, 0) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 1, x.rigidTransf.params().s3 * (dRdv(2, 1) * this->ssurf.S(0, i) + dRdv(5, 1) * this->ssurf.S(1, i) + dRdv(8, 1) * this->ssurf.S(2, i)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 2, x.rigidTransf.params().s3 * (dRdv(2, 2) * this->ssurf.S(0, i) + dRdv(5, 2) * this->ssurf.S(1, i) + dRdv(8, 2) * this->ssurf.S(2, i)));
 		}
 	}
 
 	void dE_normal_d_X(const InputType& x,
-		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 
@@ -445,20 +555,20 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			float ndndz = normal.transpose() * dndz;
 			
 
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(0) - normal(0) * ndndx));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(1) - normal(1) * ndndx));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(2) - normal(2) * ndndx));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(0) - normal(0) * ndndy));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(1) - normal(1) * ndndy));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(2) - normal(2) * ndndy));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 0, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(0) - normal(0) * ndndz));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 1, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(1) - normal(1) * ndndz));
-			jvals.add(tripletSu.row() * this->rowStride + rowOffset + 2, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(2) - normal(2) * ndndz));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 0, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(0) - normal(0) * ndndx));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 1, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(1) - normal(1) * ndndx));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 2, colBase + tripletSu.col() * 3 + 0, this->eWeights.normals * (1.0 / nnorm) * (dndx(2) - normal(2) * ndndx));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 0, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(0) - normal(0) * ndndy));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 1, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(1) - normal(1) * ndndy));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 2, colBase + tripletSu.col() * 3 + 1, this->eWeights.normals * (1.0 / nnorm) * (dndy(2) - normal(2) * ndndy));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 0, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(0) - normal(0) * ndndz));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 1, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(1) - normal(1) * ndndz));
+			jvals.add(rowOffset + tripletSu.row() * this->rowStride + blockOffset + 2, colBase + tripletSu.col() * 3 + 2, this->eWeights.normals * (1.0 / nnorm) * (dndz(2) - normal(2) * ndndz));
 		}
 	}
 
 	void dE_normal_d_uv(const InputType& x,
-		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateTransformedSubdivisionSurface(x, x.rigidTransf.rotation(), this->ssurf_r);
 		//this->evaluateSubdivisionSurface(x, this->ssurf);
@@ -474,17 +584,17 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			float ndndu = normal.transpose() * dndu;
 			float ndndv = normal.transpose() * dndv;
 
-			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(0) - normal(0) * ndndu));
-			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(1) - normal(1) * ndndu));
-			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(2) - normal(2) * ndndu));
-			jvals.add(this->rowStride * i + rowOffset + 0, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(0) - normal(0) * ndndv));
-			jvals.add(this->rowStride * i + rowOffset + 1, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(1) - normal(1) * ndndv));
-			jvals.add(this->rowStride * i + rowOffset + 2, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(2) - normal(2) * ndndv));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(0) - normal(0) * ndndu));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(1) - normal(1) * ndndu));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, colBase + 2 * i + 0, this->eWeights.normals * (1.0 / nnorm) * (dndu(2) - normal(2) * ndndu));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(0) - normal(0) * ndndv));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(1) - normal(1) * ndndv));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, colBase + 2 * i + 1, this->eWeights.normals * (1.0 / nnorm) * (dndv(2) - normal(2) * ndndv));
 		}
 	}
 
 	void dE_normal_d_rst(const InputType& x,
-		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset) {
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
 		// Evaluate surface at x
 		this->evaluateSubdivisionSurface(x, this->ssurf);
 
@@ -505,15 +615,15 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			Vector3 normal = this->ssurf.dSdu.col(i).cross(this->ssurf.dSdv.col(i));
 			normal.normalize();
 
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, this->eWeights.normals * (dRdv(0, 0) * normal(0) + dRdv(3, 0) * normal(1) + dRdv(6, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, this->eWeights.normals * (dRdv(0, 1) * normal(0) + dRdv(3, 1) * normal(1) + dRdv(6, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, this->eWeights.normals * (dRdv(0, 2) * normal(0) + dRdv(3, 2) * normal(1) + dRdv(6, 2) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, this->eWeights.normals * (dRdv(1, 0) * normal(0) + dRdv(4, 0) * normal(1) + dRdv(7, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, this->eWeights.normals * (dRdv(1, 1) * normal(0) + dRdv(4, 1) * normal(1) + dRdv(7, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, this->eWeights.normals * (dRdv(1, 2) * normal(0) + dRdv(4, 2) * normal(1) + dRdv(7, 2) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, this->eWeights.normals * (dRdv(2, 0) * normal(0) + dRdv(5, 0) * normal(1) + dRdv(8, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, this->eWeights.normals * (dRdv(2, 1) * normal(0) + dRdv(5, 1) * normal(1) + dRdv(8, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, this->eWeights.normals * (dRdv(2, 2) * normal(0) + dRdv(5, 2) * normal(1) + dRdv(8, 2) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, r_base + 0, this->eWeights.normals * (dRdv(0, 0) * normal(0) + dRdv(3, 0) * normal(1) + dRdv(6, 0) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, r_base + 1, this->eWeights.normals * (dRdv(0, 1) * normal(0) + dRdv(3, 1) * normal(1) + dRdv(6, 1) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, r_base + 2, this->eWeights.normals * (dRdv(0, 2) * normal(0) + dRdv(3, 2) * normal(1) + dRdv(6, 2) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, r_base + 0, this->eWeights.normals * (dRdv(1, 0) * normal(0) + dRdv(4, 0) * normal(1) + dRdv(7, 0) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, r_base + 1, this->eWeights.normals * (dRdv(1, 1) * normal(0) + dRdv(4, 1) * normal(1) + dRdv(7, 1) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 1, r_base + 2, this->eWeights.normals * (dRdv(1, 2) * normal(0) + dRdv(4, 2) * normal(1) + dRdv(7, 2) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 0, this->eWeights.normals * (dRdv(2, 0) * normal(0) + dRdv(5, 0) * normal(1) + dRdv(8, 0) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 1, this->eWeights.normals * (dRdv(2, 1) * normal(0) + dRdv(5, 1) * normal(1) + dRdv(8, 1) * normal(2)));
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 2, this->eWeights.normals * (dRdv(2, 2) * normal(0) + dRdv(5, 2) * normal(1) + dRdv(8, 2) * normal(2)));
 /*
 			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 0) * normal(1)
 				+ x.rigidTransf.params().s3 * dRdv(6, 0) * normal(2)));
@@ -638,6 +748,24 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar> {
 			jvals.add(rowOffset + i * 3 + 0, s_base + 0, this->eWeights.thinplate * tpe(i, 0));
 			jvals.add(rowOffset + i * 3 + 1, s_base + 1, this->eWeights.thinplate * tpe(i, 1));
 			jvals.add(rowOffset + i * 3 + 2, s_base + 2, this->eWeights.thinplate * tpe(i, 2));
+		}
+	}
+
+	void dE_continuity_d_uv(const InputType& x,
+		Eigen::TripletArray<Scalar, typename JacobianType::Index>& jvals, const Eigen::Index colBase, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
+		
+		Eigen::Vector4d dist_duv(0.0, 0.0, 0.0, 0.0);
+		for (int i = 0; i < this->nDataPoints() - 1; i++) {
+			this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()), &dist_duv);
+
+			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 0, dist_duv(0));	// u1
+			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
+			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
+			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 3, dist_duv(3));	// v2
+			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 0, dist_duv(0));	// u1
+			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
+			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
+			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 3, dist_duv(3));	// v2
 		}
 	}
 	/************ UPDATES ************/

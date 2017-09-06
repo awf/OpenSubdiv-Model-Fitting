@@ -18,7 +18,7 @@ PosOnlyFunctor::PosOnlyFunctor(const Matrix3X& data_points, const MeshTopology& 
 // Functor functions
 // 1. Evaluate the residuals at x
 void PosOnlyFunctor::f_impl(const InputType& x, ValueType& fvec) {
-	this->E_pos(x, data_points, fvec, 0);
+	this->E_pos(x, data_points, fvec, 0, 0);
 	this->E_constraints(x, data_points, data_constraints, fvec, this->nDataPoints() * 3);
 }
 
@@ -30,14 +30,14 @@ void PosOnlyFunctor::df_impl(const InputType& x, Eigen::TripletArray<Scalar, typ
 
 	// Fill Jacobian columns.  
 	// 1. Derivatives wrt control vertices.
-	this->dE_pos_d_X(x, jvals, X_base, 0);
+	this->dE_pos_d_X(x, jvals, X_base, 0, 0);
 	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3);
 
 	// 2. Derivatives wrt correspondences
-	this->dE_pos_d_uv(x, jvals, ubase, 0);
+	this->dE_pos_d_uv(x, jvals, ubase, 0, 0);
 
 	// 2. Derivatives wrt correspondences
-	this->dE_pos_d_rst(x, jvals, rst_base, 0);
+	this->dE_pos_d_rst(x, jvals, rst_base, 0, 0);
 	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3);
 }
 
