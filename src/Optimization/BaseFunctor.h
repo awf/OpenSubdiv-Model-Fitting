@@ -421,15 +421,9 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
 	}
 
 	void E_continuity(const InputType& x, ValueType &fvec, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
-		// FixMe: For now considered only version that doesn't close the curve 
-		// (continuity of the last wrt first point not checked and the last term 0 -> makes the Jacobian sparsity structure easier)
 		for (int i = 0; i < this->nDataPoints(); i++) {
-			//std::cout << this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints())) << std::endl;
-			//fvec(rowOffset + i * this->rowStride + blockOffset) = this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()));
 			fvec(rowOffset + i + blockOffset) = this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()));
 		}
-		//fvec(rowOffset + (this->nDataPoints() - 1) * this->rowStride + blockOffset) = 0;
-		//fvec(rowOffset + (this->nDataPoints() - 1) + blockOffset) = 0;
 	}
 
 	/************ GRADIENTS ************/
