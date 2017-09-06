@@ -10,6 +10,8 @@
 #include <Eigen/Eigen>
 #include <Eigen/SparseQR>
 
+#include <Eigen/SPQRSupport>
+
 #include "Eigen_ext/eigen_extras.h"
 #include "Eigen_ext/SparseQR_Ext.h"
 #include "Eigen_ext/BlockSparseQR_Ext.h"
@@ -42,46 +44,12 @@ int main() {
 	typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
 	//typedef SparseQR<JacobianType, NaturalOrdering<Eigen::Index> > GeneralQRSolver;
 	typedef ColPivHouseholderQR<Matrix<Scalar, 3, 2> > DenseQRSolverSmallBlock;
-	//typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolverSmallBlock> GeneralQRSolver;
+	typedef SPQR<JacobianType> SPQRSolver;
 	typedef GeneralQRSolver SparseSuperblockSolver;
 	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseQRSolverSmallBlock> DiagonalSubblockSolver;
 	typedef SparseSubblockQR_Ext<JacobianType, DiagonalSubblockSolver, SparseSuperblockSolver> SpecializedSparseSolver;
 
-
-	// QR for J1 is block diagonal
-	//typedef BlockDiagonalSparseQR_Ext2<JacobianType, DenseQRSolverSmallBlock> LeftSuperBlockSolver;
-	// FixMe: The expected diagonal strucutre of Jacobian was broken when uv continuity constraint was added - general SparseQR has to be used	
-	/*
-	JacobianType tst;
-	Eigen::TripletArray<Scalar, typename JacobianType::Index> tvals(12);
-	tvals.add(0, 0, 1);
-	tvals.add(0, 1, 3);
-	tvals.add(1, 0, 2);	
-	tvals.add(1, 1, 5);
-	tvals.add(2, 0, 8);
-	tvals.add(2, 1, 9);
-	tvals.add(3, 2, 5);
-	tvals.add(3, 3, 7);
-	tvals.add(4, 2, 6);
-	tvals.add(4, 3, 3);
-	tvals.add(5, 2, 4);
-	tvals.add(5, 3, 2);
-	
-	tst.resize(6, 4);
-	tst.setFromTriplets(tvals.begin(), tvals.end());
-	tst.makeCompressed();
-
-	Logger::instance()->logMatrixCSV(tst.toDense(), "tst.csv");
-
-	BDQRSolver slvr;
-	slvr.setSparseBlockParams(3, 2);
-	slvr.compute(tst);
-	JacobianType Qtst;
-	Qtst = slvr.matrixQ();
-	Logger::instance()->logMatrixCSV(Qtst.toDense(), "Qtst.csv");
-
-	return 0;
-	*/
+	// The right block would be assumed dense
 	JacobianType rightBlock;
 	Eigen::TripletArray<Scalar, typename JacobianType::Index> rbvals(numRightParams * numResiduals);
 	for (int i = 0; i < numResiduals; i++) {
@@ -177,11 +145,37 @@ int main() {
 	solver.colsPermutation().applyThisOnTheRight(spJ);
 	std::cout << "R err norm: " << ((Q.transpose() * spJ).toDense() - solver.matrixR().toDense()).norm() << std::endl;
 
-	Logger::instance()->logMatrixCSV((Q.transpose() * spJ).toDense(), "QtJ.csv");
-	Logger::instance()->logMatrixCSV((Q * R).toDense(), "QR.csv");
+	//Logger::instance()->logMatrixCSV((Q.transpose() * spJ).toDense(), "QtJ.csv");
+	//Logger::instance()->logMatrixCSV((Q * R).toDense(), "QR.csv");
 	Logger::instance()->logMatrixCSV(Q.toDense(), "Q.csv");
-	Logger::instance()->logMatrixCSV(Q.cwiseAbs().toDense(), "Qabs.csv");
-	Logger::instance()->logMatrixCSV(solver.matrixR().toDense(), "R.csv");
+	//Logger::instance()->logMatrixCSV(Q.cwiseAbs().toDense(), "Qabs.csv");
+	//Logger::instance()->logMatrixCSV(solver.matrixR().toDense(), "R.csv");
+
+
+	// Evaluate SPQR solver
+	JacobianType spJSP;
+	spJSP.resize(numResiduals, numParams);
+	spJSP.setFromTriplets(jvals.begin(), jvals.end());
+	//spJSP.makeCompressed();
+
+	Logger::instance()->logMatrixCSV(spJSP.toDense(), "spJSP.csv");
+
+	SPQRSolver spqr;
+	begin = clock();
+	spqr.compute(spJSP);
+	std::cout << "SPQR Compute elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	begin = clock();
+
+	JacobianType QSP;
+	//QSP.setIdentity();
+	Eigen::MatrixXd q(spJSP.rows(), spJSP.rows());
+	q.setIdentity();
+	Eigen::MatrixXd res;
+	res = spqr.matrixQ() * q;
+	Logger::instance()->logMatrixCSV(res, "Qs.csv");
+	std::cout << "SPQR MatrixQ elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
 	return 0;
 	
 	/*
