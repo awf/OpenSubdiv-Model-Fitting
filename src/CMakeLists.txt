@@ -76,6 +76,7 @@ ADD_EXECUTABLE(Fit-Subdiv-to-3D-Points
 	Eigen_ext/BlockSparseQR_Ext.h
 	Eigen_ext/SparseSubblockQR_Ext.h
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
 	)
 	
 TARGET_LINK_LIBRARIES(Fit-Subdiv-to-3D-Points ${OSD_LIB})
@@ -113,6 +114,7 @@ ADD_EXECUTABLE(QR_Solver_Test
 	Eigen_ext/BlockSparseQR_Ext.h
 	Eigen_ext/SparseSubblockQR_Ext.h
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
 	)
 
 ADD_EXECUTABLE(QR_Diagonalization_Test
@@ -123,6 +125,7 @@ ADD_EXECUTABLE(QR_Diagonalization_Test
 	Eigen_ext/BlockSparseQR_Ext.h
 	Eigen_ext/SparseSubblockQR_Ext.h
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
 	)
 	
 TARGET_LINK_LIBRARIES(QR_Solver_Test ${OSD_LIB})

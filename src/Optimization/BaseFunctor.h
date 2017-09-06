@@ -5,6 +5,7 @@
 #include <Eigen/SparseQR>
 
 #include "../Eigen_ext/eigen_extras.h"
+#include "../Eigen_ext/SparseQR_Ext.h"
 #include "../Eigen_ext/BlockSparseQR_Ext.h"
 #include "../Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "../Eigen_ext/SparseSubblockQR_Ext.h"
@@ -255,7 +256,7 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
 	typedef ColPivHouseholderQR<Matrix<Scalar, BlkRows, BlkCols> > DenseQRSolverSmallBlock;
 
 	// QR for J1 is block diagonal
-	typedef SparseQR<JacobianType, COLAMDOrdering<int> > SparseSuperblockSolver;
+	typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > SparseSuperblockSolver;
 	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseQRSolverSmallBlock> DiagonalSubblockSolver;
 	typedef SparseSubblockQR_Ext<JacobianType, DiagonalSubblockSolver, SparseSuperblockSolver> LeftSuperBlockSolver;
 

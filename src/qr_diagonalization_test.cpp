@@ -11,6 +11,7 @@
 #include <Eigen/SparseQR>
 
 #include "Eigen_ext/eigen_extras.h"
+#include "Eigen_ext/SparseQR_Ext.h"
 #include "Eigen_ext/BlockSparseQR_Ext.h"
 #include "Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "Eigen_ext/SparseSubblockQR_Ext.h"
@@ -38,7 +39,7 @@ int main() {
 	Eigen::Index numRightParams = 105;
 
 	typedef SparseMatrix<Scalar, ColMajor, int> JacobianType;
-	typedef SparseQR<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
+	typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
 	//typedef SparseQR<JacobianType, NaturalOrdering<Eigen::Index> > GeneralQRSolver;
 	typedef ColPivHouseholderQR<Matrix<Scalar, 3, 2> > DenseQRSolverSmallBlock;
 	//typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolverSmallBlock> GeneralQRSolver;
