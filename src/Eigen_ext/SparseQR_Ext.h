@@ -190,6 +190,7 @@ class SparseQR_Ext : public SparseSolverBase<SparseQR_Ext<_MatrixType,_OrderingT
     SparseQR_ExtMatrixQReturnType<SparseQR_Ext> matrixQ() const 
     { return SparseQR_ExtMatrixQReturnType<SparseQR_Ext>(*this); }
     
+
     /** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
       * It is the combination of the fill-in reducing permutation and numerical column pivoting.
       */

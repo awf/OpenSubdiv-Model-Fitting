@@ -10,7 +10,12 @@
 #include <Eigen/Eigen>
 #include <Eigen/SparseQR>
 
-#include <Eigen/SPQRSupport>
+//#include <Eigen/SPQRSupport>
+#include <Eigen/SparseCore>
+#include <Eigen/src/Core/util/DisableStupidWarnings.h>
+#include <suitesparse/SuiteSparseQR.hpp>
+#include <Eigen/src/CholmodSupport/CholmodSupport.h>
+#include "Eigen_ext/SuiteSparseQRSupport_Ext.h"
 
 #include "Eigen_ext/eigen_extras.h"
 #include "Eigen_ext/SparseQR_Ext.h"
@@ -35,12 +40,13 @@ int main() {
 	std::default_random_engine gen;
 	std::uniform_real_distribution<double> dist(0.0, 1.0);
 	
-	Eigen::Index numVars = 187;
+	Eigen::Index numVars = 1000;
 	Eigen::Index numParams = numVars * 2;
 	Eigen::Index numResiduals = numVars * 3 + numVars;
 	Eigen::Index numRightParams = 105;
 
 	typedef SparseMatrix<Scalar, ColMajor, int> JacobianType;
+	typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianTypeSPQR;
 	typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
 	//typedef SparseQR<JacobianType, NaturalOrdering<Eigen::Index> > GeneralQRSolver;
 	typedef ColPivHouseholderQR<Matrix<Scalar, 3, 2> > DenseQRSolverSmallBlock;
@@ -71,32 +77,34 @@ int main() {
 			jvals.add(i, j, dist(gen));
 		}
 	}*/
-	//for (int i = 0; i < numResiduals; i++) {
-	for (int i = 0; i < numVars; i++) {
+	//for (int i = 0; i < numVars; i++) {
+	for (int i = 0; i < numParams; i++) {
 		
 			for (int j = numParams - 1; j >= i; j--) {
-				//jvals.add(i, j, dist(gen));
+				//jvals.add(i + numVars * 0, j, dist(gen));
 				//jvals.add(i * 2, j, dist(gen));
 				//jvals.add(i * 2 + 1, j, dist(gen));
 				//jvals.add(i + numParams * 2, j, dist(gen));
 			}
 
 			for (int j = i * 2; j < (i * 2) + 2 && j < numParams; j++) {
-				jvals.add(i * 3, j, dist(gen));
-				jvals.add(i * 3 + 1, j, dist(gen));
-				jvals.add(i * 3 + 2, j, dist(gen));
-				/*
-				jvals.add(i + numVars * 3, j, dist(gen));
+				jvals.add(i * 4, j, dist(gen));
+				jvals.add(i * 4 + 1, j, dist(gen));
+				jvals.add(i * 4 + 2, j, dist(gen));
+				/**/
+				///*
+				jvals.add(i * 4 + 3, j, dist(gen));
 				if (j < numParams - 2) {
-				jvals.add(i + numVars * 3, j + 2, dist(gen));
+				jvals.add(i * 4 + 3, j + 2, dist(gen));
 				}
-				*/
+				//*/
 
-
+				/*
 				jvals.add(i + numVars * 3, j, dist(gen));
 				if (j < numParams - 2) {
 					jvals.add(i + numVars * 3, j + 2, dist(gen));
 				}
+				*/
 			}
 
 		}
@@ -113,13 +121,15 @@ int main() {
 	spJ.setFromTriplets(jvals.begin(), jvals.end());
 	spJ.makeCompressed();
 
-	Logger::instance()->logMatrixCSV(spJ.toDense(), "spJ.csv");
+	clock_t begin;
+//	Logger::instance()->logMatrixCSV(spJ.toDense(), "spJ.csv");
 
 	//GeneralQRSolver solver;
+	/*
 	SpecializedSparseSolver solver;
 	solver.setDiagBlockParams(numVars * 3, numVars * 2);
 	solver.getDiagSolver().setSparseBlockParams(3, 2);
-	clock_t begin = clock();
+	begin = clock();
 	solver.compute(spJ);
 
 	std::cout << "Compute elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
@@ -142,23 +152,26 @@ int main() {
 	solver.colsPermutation().applyThisOnTheRight(R);
 	std::cout << "J err norm: " << ((Q * R).toDense() - spJ.toDense()).norm() << std::endl;
 
+	R.resize(spJ.rows(), spJ.rows());
+	R.setIdentity();
+	R = R * solver.matrixR();
 	solver.colsPermutation().applyThisOnTheRight(spJ);
-	std::cout << "R err norm: " << ((Q.transpose() * spJ).toDense() - solver.matrixR().toDense()).norm() << std::endl;
-
+	std::cout << "R err norm: " << ((Q.transpose() * spJ).toDense() - R.toDense()).norm() << std::endl;
+	*/
 	//Logger::instance()->logMatrixCSV((Q.transpose() * spJ).toDense(), "QtJ.csv");
 	//Logger::instance()->logMatrixCSV((Q * R).toDense(), "QR.csv");
-	Logger::instance()->logMatrixCSV(Q.toDense(), "Q.csv");
+//	Logger::instance()->logMatrixCSV(Q.toDense(), "Q.csv");
 	//Logger::instance()->logMatrixCSV(Q.cwiseAbs().toDense(), "Qabs.csv");
-	//Logger::instance()->logMatrixCSV(solver.matrixR().toDense(), "R.csv");
+//	Logger::instance()->logMatrixCSV(R.toDense(), "R.csv");
 
 
 	// Evaluate SPQR solver
-	JacobianType spJSP;
+	JacobianTypeSPQR spJSP;
 	spJSP.resize(numResiduals, numParams);
 	spJSP.setFromTriplets(jvals.begin(), jvals.end());
 	//spJSP.makeCompressed();
 
-	Logger::instance()->logMatrixCSV(spJSP.toDense(), "spJSP.csv");
+//	Logger::instance()->logMatrixCSV(spJSP.toDense(), "spJSP.csv");
 
 	SPQRSolver spqr;
 	begin = clock();
@@ -166,68 +179,30 @@ int main() {
 	std::cout << "SPQR Compute elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	begin = clock();
-
-	JacobianType QSP;
-	//QSP.setIdentity();
-	Eigen::MatrixXd q(spJSP.rows(), spJSP.rows());
-	q.setIdentity();
-	Eigen::MatrixXd res;
-	res = spqr.matrixQ() * q;
-	Logger::instance()->logMatrixCSV(res, "Qs.csv");
+	SPQRSolver::MatrixType QSP(spJSP.rows(), spJSP.rows());
+	QSP.setIdentity();
+	//Eigen::MatrixXd q(spJSP.rows(), spJSP.rows());
+	//q.setIdentity();
+	//Eigen::MatrixXd res;
+	QSP = spqr.matrixQ() * QSP;
+	QSP.prune(Scalar(0));
 	std::cout << "SPQR MatrixQ elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-
-	return 0;
 	
-	/*
-	Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, Eigen::Index> perm(numResiduals);
-	perm.setIdentity();
-	//std::cout << perm.indices() << std::endl;
-	for (Eigen::Index i = 0; i < numParams; i++) {
-		perm.indices().row(i * 2) << i;
-		perm.indices().row(i * 2 + 1) << i + numParams * 3;
-		perm.indices().row(i + numParams * 2) << i + numParams;
-		perm.indices().row(i + numParams * 3) << i + numParams * 2;
-	}
-	//perm.applyThisOnTheLeft(spJ);
-	spJ = perm * spJ;
-	*/
-	JacobianType spJ2;
-	Eigen::TripletArray<Scalar, typename JacobianType::Index> jvals2(64);
-
-	for (int i = 0; i < numResiduals; i++) {
-		for (int j = numParams - 1; j >= i; j--) {
-			jvals2.add(i * 2, j, dist(gen));
-		}
-	}
-	for (int i = 0; i < numResiduals; i++) {
-		for (int j = i * 2; j < i * 2 + 4 && j < numParams; j++) {
-			jvals2.add(i * 2 + 1, j, dist(gen));
-		}
-		/*for (int j = i; j < 4 && j < numParams; j++) {
-			jvals2.add(i * 2 + 1, j, dist(gen));
-		}*/
-		/*for (int j = numParams - 1; j >= i; j--) {
-			jvals2.add(i * 2 + 1, j, dist(gen));
-		}*/
-	}
-	spJ2.resize(numResiduals, numParams);
-	spJ2.setFromTriplets(jvals2.begin(), jvals2.end());
-	spJ2.makeCompressed();
-
-
-	Logger::instance()->logMatrixCSV(spJ2.toDense(), "spJ_r.csv");
-
-	GeneralQRSolver solver2;
+	JacobianTypeSPQR RSP(spJSP.rows(), spJSP.cols());
+	RSP = spqr.matrixR();
+	spqr.colsPermutation().applyThisOnTheRight(RSP);
+	std::cout << "SPQR J err norm: " << ((QSP * RSP).toDense() - spJSP.toDense()).norm() << std::endl;
 	
-	begin = clock();
-	solver2.compute(spJ2);
+	RSP.resize(spJSP.rows(), spJSP.rows());
+	RSP.setIdentity();
+	RSP = RSP * spqr.matrixR();
+	spqr.colsPermutation().applyThisOnTheRight(spJSP);
+	std::cout << "SPQR R err norm: " << ((QSP.transpose() * spJSP).toDense() - RSP.toDense()).norm() << std::endl;
 
-	JacobianType Q2;
-	//Q2 = solver.matrixQ2();// .transpose();
-	Q2 = solver2.matrixQ();
+//	Logger::instance()->logMatrixCSV(QSP.toDense(), "Qs.csv");
+//	Logger::instance()->logMatrixCSV(RSP.toDense(), "Rs.csv");
+//	Logger::instance()->logMatrixCSV((QSP.transpose() * spJSP).toDense(), "QJRs.csv");
 
-	//JacobianType res = solver.matrixQ().transpose() * rightBlock;
-	std::cout << "Reordered elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 	return 0;
 
 	/*

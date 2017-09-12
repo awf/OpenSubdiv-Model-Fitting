@@ -34,7 +34,7 @@ class SparseSubblockQR_Ext : public SparseSolverBase<SparseSubblockQR_Ext<_Matri
     typedef typename DiagBlockQRSolver::MatrixType DiagBlockMatrixType;
     typedef typename SuperblockQRSolver::MatrixType SuperblockMatrixType;
     typedef typename DiagBlockQRSolver::MatrixQType LeftBlockMatrixQType;
-    typedef typename SuperblockQRSolver::MatrixQType SuperblockMatrixQType;
+    //typedef typename SuperblockQRSolver::MatrixQType SuperblockMatrixQType;
     typedef typename MatrixType::Scalar Scalar;
     typedef typename MatrixType::RealScalar RealScalar;
     typedef typename MatrixType::StorageIndex StorageIndex;
@@ -294,8 +294,15 @@ void SparseSubblockQR_Ext<MatrixType,DiagBlockQRSolver,SuperblockQRSolver>::fact
 	MatrixType bottomBlock = mat.bottomRows(n2);
 
     // Compute QR for the block diagonal part
+	clock_t begin = clock();
+
+	MatrixType superQQ(n1, n1);
+	superQQ.setIdentity();
     m_diagSolver.compute(diagBlock);
-    eigen_assert(m_diagSolver.info() == Success);
+	superQQ = m_diagSolver.matrixQ() * superQQ;
+	std::cout << "DiagBlock elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	eigen_assert(m_diagSolver.info() == Success);
 
     typename DiagBlockQRSolver::MatrixRType R1 = m_diagSolver.matrixR();
 
@@ -324,6 +331,7 @@ void SparseSubblockQR_Ext<MatrixType,DiagBlockQRSolver,SuperblockQRSolver>::fact
 	superblock.resize(n1 + n2, m);
 	superblock.setFromTriplets(triplets.begin(), triplets.end());
 	superblock.makeCompressed();
+	superblock.prune(Scalar(0));
 
 //	SuperblockMatrixType superblock(n1 + n2, m);
 //	superblock.topRows(n1) = R1;
@@ -343,12 +351,14 @@ void SparseSubblockQR_Ext<MatrixType,DiagBlockQRSolver,SuperblockQRSolver>::fact
 	DiagBlockQRSolver::MatrixQType diagQ = m_diagSolver.matrixQ();
 	diagQ.conservativeResize(n1, n1 + n2);
 	this->m_Q.topRows(n1) = diagQ;
-	MatrixType superQ;
-	superQ = m_superSolver.matrixQ();
+	MatrixType superQ(n1 + n2, n1 + n2);
+	superQ.setIdentity();
+	superQ = m_superSolver.matrixQ() * superQ;
 	this->m_Q = this->m_Q * superQ;
 
     // fill cols permutation
-	SuperblockQRSolver::PermutationType perm = m_superSolver.colsPermutation() * m_diagSolver.colsPermutation();
+	//SuperblockQRSolver::PermutationType perm = m_superSolver.colsPermutation() * m_diagSolver.colsPermutation();
+	PermutationType perm = m_superSolver.colsPermutation() * m_diagSolver.colsPermutation();
 	for (Index j = 0; j < m; j++)
 		m_outputPerm_c.indices()(j, 0) = perm.indices()(j, 0);//m_superSolver.colsPermutation().indices()(j,0);
 

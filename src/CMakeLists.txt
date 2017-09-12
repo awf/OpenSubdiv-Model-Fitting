@@ -15,6 +15,11 @@ IF(WIN32)
     SET(OSD_INCLUDE_DIRS "${OSD_PATH}/include")
     SET(OSD_LIBRARY_DIRS "${OSD_PATH}/lib")
     SET(OSD_LIB "${OSD_LIBRARY_DIRS}/$(Configuration)/osdCPU.lib")
+    SET(SSP_PATH "Z:/suitesparse-metis-for-windows-master/suitesparse-metis-for-windows-master/build/install" CACHE PATH "Path to SuiteSparse")
+    SET(SSP_INCLUDE_DIRS "${SSP_PATH}/include")
+    SET(SSP_LIBRARY_DIRS "${SSP_PATH}/lib")
+    SET(SSP_BLAS_LIBRARY_DIRS "${SSP_PATH}/lib64/lapack_blas_windows")
+    SET(SSP_LIB "libamd.lib;libbtf.lib;libcamd.lib;libccolamd.lib;libcholmod.lib;libcolamd.lib;libcxsparse.lib;libklu.lib;libldl.lib;libspqr.lib;libumfpack.lib;metis.lib;suitesparseconfig.lib;libblas.lib;liblapack.lib")
 ELSEIF(UNIX)
     # OSD Compiled using GLFW 3.1.2
     SET(OSD_PATH "/usr/local" CACHE PATH "Path to osd")
@@ -24,8 +29,8 @@ ELSEIF(UNIX)
 ELSE()
     MESSAGE(FATAL_ERROR "Unrecognized OS")
 ENDIF()
-INCLUDE_DIRECTORIES(${OSD_INCLUDE_DIRS})
-LINK_DIRECTORIES(${OSD_LIBRARY_DIRS})
+INCLUDE_DIRECTORIES(${OSD_INCLUDE_DIRS} ${SSP_INCLUDE_DIRS})
+LINK_DIRECTORIES(${OSD_LIBRARY_DIRS} ${SSP_LIBRARY_DIRS} ${SSP_BLAS_LIBRARY_DIRS})
 
 # Eigen
 SET(CMAKE_PREFIX_PATH "Z:/Eigen_PR/build;Z:/Eigen_PR;Z:/OpenSubdiv/install/include;C:/Program Files/Eigen3/include/eigen3")
@@ -77,9 +82,10 @@ ADD_EXECUTABLE(Fit-Subdiv-to-3D-Points
 	Eigen_ext/SparseSubblockQR_Ext.h
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
 	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
 	)
 	
-TARGET_LINK_LIBRARIES(Fit-Subdiv-to-3D-Points ${OSD_LIB})
+TARGET_LINK_LIBRARIES(Fit-Subdiv-to-3D-Points ${OSD_LIB} ${SSP_LIB})
 
 # Tests
 ADD_EXECUTABLE(QR_Solver_Test
@@ -115,6 +121,7 @@ ADD_EXECUTABLE(QR_Solver_Test
 	Eigen_ext/SparseSubblockQR_Ext.h
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
 	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
 	)
 
 ADD_EXECUTABLE(QR_Diagonalization_Test
@@ -126,6 +133,22 @@ ADD_EXECUTABLE(QR_Diagonalization_Test
 	Eigen_ext/SparseSubblockQR_Ext.h
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
 	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
 	)
 	
-TARGET_LINK_LIBRARIES(QR_Solver_Test ${OSD_LIB})
+ADD_EXECUTABLE(QR_Banded_Test
+	qr_banded_test.cpp
+    Logger.cpp
+	Logger.h
+	Eigen_ext/eigen_extras.h
+	Eigen_ext/BlockSparseQR_Ext.h
+	Eigen_ext/SparseSubblockQR_Ext.h
+	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
+	)
+	
+
+TARGET_LINK_LIBRARIES(QR_Solver_Test ${OSD_LIB} ${SSP_LIB})
+TARGET_LINK_LIBRARIES(QR_Diagonalization_Test ${OSD_LIB} ${SSP_LIB})
+TARGET_LINK_LIBRARIES(QR_Banded_Test ${OSD_LIB} ${SSP_LIB})
