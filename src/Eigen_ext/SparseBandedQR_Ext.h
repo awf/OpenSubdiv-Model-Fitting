@@ -92,6 +92,7 @@ class SparseBandedQR_Ext : public SparseSolverBase<SparseBandedQR_Ext<_MatrixTyp
 
     typedef SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_Ext> MatrixQType;
     typedef SparseMatrix<Scalar, ColMajor, StorageIndex> MatrixRType;
+	typedef PermutationMatrix<Dynamic, Dynamic, StorageIndex> PermutationType;
 
     enum {
       ColsAtCompileTime = MatrixType::ColsAtCompileTime,
@@ -188,6 +189,15 @@ class SparseBandedQR_Ext : public SparseSolverBase<SparseBandedQR_Ext<_MatrixTyp
 	void setBlockParams(const Index &_blockRows, const Index &_blockCols) {
 		this->m_blockRows = _blockRows;
 		this->m_blockCols = _blockCols;
+	}
+
+	/** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
+	* It is the combination of the fill-in reducing permutation and numerical column pivoting.
+	*/
+	const PermutationType& colsPermutation() const
+	{
+		eigen_assert(m_isInitialized && "Decomposition is not initialized.");
+		return m_outputPerm_c;
 	}
 
     /** \returns A string describing the type of error.
@@ -287,6 +297,7 @@ class SparseBandedQR_Ext : public SparseSolverBase<SparseBandedQR_Ext<_MatrixTyp
     MatrixRType m_R;               // The triangular factor matrix
     MatrixQStorageType m_Q;               // The orthogonal reflectors
     ScalarVector m_hcoeffs;         // The Householder coefficients
+	PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
     RealScalar m_threshold;         // Threshold to determine null Householder reflections
     bool m_useDefaultThreshold;     // Use default threshold
     Index m_nonzeropivots;          // Number of non zero pivots found
@@ -334,6 +345,9 @@ void SparseBandedQR_Ext<MatrixType,OrderingType>::analyzePattern(const MatrixTyp
 template <typename MatrixType, typename OrderingType>
 void SparseBandedQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
 {
+	// Not rank-revealing, column permutation is identity
+	m_outputPerm_c.setIdentity(mat.cols());
+
 	m_pmat = mat;
 
 	typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrixType;
