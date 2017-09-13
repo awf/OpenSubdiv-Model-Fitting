@@ -38,6 +38,9 @@ FIND_PACKAGE(Eigen3)
 # Point to Eigen directly, if developing Eigen at the same time SET(EIGEN3_INCLUDE_DIR "C:/dev/eigen_pr")
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
 
+# For debug builds
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
+
 IF(UNIX)
     ADD_DEFINITIONS("-std=c++11")
 ENDIF()
