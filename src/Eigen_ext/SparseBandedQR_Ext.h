@@ -432,46 +432,63 @@ struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<S
     Index diagSize = (std::min)(m,n);
 	res = m_other;
 
+	//clock_t begin = clock();
+
+	// FixMe: Better estimation of nonzeros?
+	Eigen::TripletArray<Scalar, typename MatrixType::Index> resVals(Index(res.rows() * res.cols() * 0.1));
+
 	SparseVector resColJ;
 	const Scalar Zero = Scalar(0);
 	Scalar tau = Scalar(0);
     if (m_transpose)
     {
-      eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
-      //Compute res = Q' * other column by column
-	  for (Index j = 0; j < res.cols(); j++) {
-		// Use temporary vector resColJ inside of the for loop - faster access
-		resColJ = res.col(j).pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
-		for (Index k = 0; k < diagSize; k++) {
-			// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
-			tau = m_qr.m_Q.col(k).dot(resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps));
-			if (tau == Zero) 
-				continue;
-			tau = tau * m_qr.m_hcoeffs(k);
-			resColJ -= tau *  m_qr.m_Q.col(k);
+		eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+		//Compute res = Q' * other column by column
+		for (Index j = 0; j < res.cols(); j++) {
+			// Use temporary vector resColJ inside of the for loop - faster access
+			resColJ = res.col(j).pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+			for (Index k = 0; k < diagSize; k++) {
+				// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
+				tau = m_qr.m_Q.col(k).dot(resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps));
+				if (tau == Zero)
+					continue;
+				tau = tau * m_qr.m_hcoeffs(k);
+				resColJ -= tau *  m_qr.m_Q.col(k);
+			}
+			// Write the result back to j-th column of res
+			//res.col(j) = resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+				resVals.add(it.row(), j, it.value());
+			}
 		}
-		// Write the result back to j-th column of res
-		res.col(j) = resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
-	  }
     }
     else
     {
-      eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
-      // Compute res = Q * other column by column
-	  for (Index j = 0; j < res.cols(); j++) {
-		// Use temporary vector resColJ inside of the for loop - faster access
-		resColJ = res.col(j).pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
-		for (Index k = diagSize - 1; k >= 0; k--) {
-			tau = m_qr.m_Q.col(k).dot(resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps));
-			if (tau == Zero) 
-				continue;
-			tau = tau * m_qr.m_hcoeffs(k);
-			resColJ -= tau *  m_qr.m_Q.col(k);
+		eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+		// Compute res = Q * other column by column
+		for (Index j = 0; j < res.cols(); j++) {
+			// Use temporary vector resColJ inside of the for loop - faster access
+			resColJ = res.col(j).pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+			for (Index k = diagSize - 1; k >= 0; k--) {
+				tau = m_qr.m_Q.col(k).dot(resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps));
+				if (tau == Zero) 
+					continue;
+				tau = tau * m_qr.m_hcoeffs(k);
+				resColJ -= tau *  m_qr.m_Q.col(k);
+			}
+			// Write the result back to j-th column of res
+			//res.col(j) = resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+				resVals.add(it.row(), j, it.value());
+			}
 		}
-		// Write the result back to j-th column of res
-		res.col(j) = resColJ.pruned(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
-	  }
     }
+
+	res.setFromTriplets(resVals.begin(), resVals.end());
+	res.prune(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+	res.makeCompressed();
+
+	//std::cout << "Elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
   }
   const SparseBandedQR_ExtType& m_qr;
   const Derived& m_other;

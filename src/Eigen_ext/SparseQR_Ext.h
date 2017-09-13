@@ -648,6 +648,9 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
     Index diagSize = (std::min)(m,n);
 	res = m_other;
 
+	// FixMe: Better estimation of nonzeros?
+	Eigen::TripletArray<Scalar, typename MatrixType::Index> resVals(Index(res.rows() * res.cols() * 0.1));
+
 	SparseVector resColJ;
 	const Scalar Zero = Scalar(0);
 	Scalar tau = Scalar(0);
@@ -667,7 +670,10 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
 			resColJ -= tau *  m_qr.m_Q.col(k);
 		}
 		// Write the result back to j-th column of res
-		res.col(j) = resColJ;
+		//res.col(j) = resColJ;
+		for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+			resVals.add(it.row(), j, it.value());
+		}
 	  }
     }
     else
@@ -685,9 +691,16 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
 			resColJ -= tau *  m_qr.m_Q.col(k);
 		}
 		// Write the result back to j-th column of res
-		res.col(j) = resColJ;
+		//res.col(j) = resColJ;
+		for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+			resVals.add(it.row(), j, it.value());
+		}
 	  }
     }
+
+	res.setFromTriplets(resVals.begin(), resVals.end());
+	res.prune(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+	res.makeCompressed();
   }
   const SparseQR_ExtType& m_qr;
   const Derived& m_other;
