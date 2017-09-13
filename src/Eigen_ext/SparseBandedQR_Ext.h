@@ -306,44 +306,44 @@ class SparseBandedQR_Ext : public SparseSolverBase<SparseBandedQR_Ext<_MatrixTyp
 
 	Index m_blockRows;
 	Index m_blockCols;
-    
-    template <typename, typename > friend struct SparseBandedQR_Ext_QProduct;
-    
+
+template <typename, typename > friend struct SparseBandedQR_Ext_QProduct;
+
 };
 
-/** \brief Preprocessing step of a QR factorization 
-  * 
+/** \brief Preprocessing step of a QR factorization
+  *
   * \warning The matrix \a mat must be in compressed mode (see SparseMatrix::makeCompressed()).
-  * 
+  *
   * In this step, the fill-reducing permutation is computed and applied to the columns of A
   * and the column elimination tree is computed as well. Only the sparsity pattern of \a mat is exploited.
-  * 
+  *
   * \note In this step it is assumed that there is no empty row in the matrix \a mat.
   */
 template <typename MatrixType, typename OrderingType>
-void SparseBandedQR_Ext<MatrixType,OrderingType>::analyzePattern(const MatrixType& mat)
+void SparseBandedQR_Ext<MatrixType, OrderingType>::analyzePattern(const MatrixType& mat)
 {
-  Index n = mat.cols();
-  Index m = mat.rows();
-  Index diagSize = (std::min)(m,n);
+	Index n = mat.cols();
+	Index m = mat.rows();
+	Index diagSize = (std::min)(m, n);
 
-  m_Q.resize(mat.rows(), mat.cols());
-  m_R.resize(mat.rows(), mat.cols());
+	m_Q.resize(mat.rows(), mat.cols());
+	m_R.resize(mat.rows(), mat.cols());
 
-  m_hcoeffs.resize(diagSize);
+	m_hcoeffs.resize(diagSize);
 
-  m_analysisIsok = true;
+	m_analysisIsok = true;
 }
 
 /** \brief Performs the numerical QR factorization of the input matrix
-  * 
+  *
   * The function SparseBandedQR_Ext::analyzePattern(const MatrixType&) must have been called beforehand with
   * a matrix having the same sparsity pattern than \a mat.
-  * 
+  *
   * \param mat The sparse column-major matrix
   */
 template <typename MatrixType, typename OrderingType>
-void SparseBandedQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
+void SparseBandedQR_Ext<MatrixType, OrderingType>::factorize(const MatrixType& mat)
 {
 	// Not rank-revealing, column permutation is identity
 	m_outputPerm_c.setIdentity(mat.cols());
@@ -354,7 +354,7 @@ void SparseBandedQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& ma
 
 	Eigen::TripletArray<Scalar, typename MatrixType::Index> Qvals(2 * mat.nonZeros());
 	Eigen::TripletArray<Scalar, typename MatrixType::Index> Rvals(2 * mat.nonZeros());
-	
+
 	Eigen::HouseholderQR<DenseMatrixType> houseqr;
 	Index blockRows = m_blockRows;
 	Index blockCols = m_blockCols;
@@ -391,6 +391,7 @@ void SparseBandedQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& ma
 		else {
 			Ji2 = DenseMatrixType::Zero(blockRows, blockCols * 2);
 			Ji2 << Ji, mat.block(bs, bs + blockCols, blockRows, blockCols).toDense();
+			//std::cout << Ji2 << "\n----\n";
 			tmp = houseqr.householderQ().transpose() * Ji2;// spJ.block(bs, bs, blockRows, blockCols * 2).toDense();
 			for (int br = 0; br < blockCols; br++) {
 				for (int bc = 0; bc < blockCols * 2; bc++) {
@@ -402,7 +403,7 @@ void SparseBandedQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& ma
 			blockRows += blockCols;
 
 			// Update Ji
-			Ji = mat.block(bs + blockCols, bs + blockCols, blockRows, blockCols);
+			Ji = mat.block(bs + blockCols, bs + blockCols, blockRows, blockCols).toDense();
 			Ji.block(0, 0, blockRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, blockRows - blockCols * 2, blockCols);
 		}
 
@@ -417,6 +418,10 @@ void SparseBandedQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& ma
   m_R.prune(Scalar(m_sqrtEps), m_sqrtEps); // Prune the matrix to avoid numerical issues (impacts performance in sparse cases)
   m_isQSorted = false;
   
+  Logger::instance()->logMatrixCSV(m_Q.toDense(), "m_Q.csv");
+
+  m_nonzeropivots = m_R.cols();	// Assuming all cols are nonzero
+
   m_isInitialized = true; 
   m_factorizationIsok = true;
   m_info = Success;

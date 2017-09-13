@@ -100,8 +100,9 @@ int main() {
 	*/
 
 	BandedQRSolver slvr;
-	slvr.setPruningEpsilon(1e-12);
-	slvr.setBlockParams(4, 2);	
+	slvr.setPruningEpsilon(1e-6);
+	//slvr.setPruningEpsilon(1e-4);
+	slvr.setBlockParams(4, 2);
 	clock_t begin = clock();
 	slvr.compute(spJ);
 	std::cout << "Slvr compute elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
