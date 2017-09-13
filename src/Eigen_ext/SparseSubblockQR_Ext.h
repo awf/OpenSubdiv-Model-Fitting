@@ -294,14 +294,8 @@ void SparseSubblockQR_Ext<MatrixType,DiagBlockQRSolver,SuperblockQRSolver>::fact
 	MatrixType bottomBlock = mat.bottomRows(n2);
 
     // Compute QR for the block diagonal part
-	clock_t begin = clock();
-
-	MatrixType superQQ(n1, n1);
-	superQQ.setIdentity();
-    m_diagSolver.compute(diagBlock);
-	superQQ = m_diagSolver.matrixQ() * superQQ;
-	std::cout << "DiagBlock elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-
+	m_diagSolver.compute(diagBlock);
+	
 	eigen_assert(m_diagSolver.info() == Success);
 
     typename DiagBlockQRSolver::MatrixRType R1 = m_diagSolver.matrixR();
