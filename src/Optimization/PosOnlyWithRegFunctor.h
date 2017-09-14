@@ -3,7 +3,7 @@
 
 #include "BaseFunctor.h"
 
-struct PosOnlyWithRegFunctor : public BaseFunctor<3, 2> {
+struct PosOnlyWithRegFunctor : public BaseFunctor<4, 2> {
 	PosOnlyWithRegFunctor(const Matrix3X& data_points, const MeshTopology& mesh, const DataConstraints& constraints = DataConstraints());
 
 	// Functor functions

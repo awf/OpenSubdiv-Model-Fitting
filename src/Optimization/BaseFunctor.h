@@ -9,6 +9,13 @@
 #include "../Eigen_ext/BlockSparseQR_Ext.h"
 #include "../Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "../Eigen_ext/SparseSubblockQR_Ext.h"
+#include "../Eigen_ext/SparseBandedQR_Ext.h"
+
+#include <Eigen/SparseCore>
+#include <Eigen/src/Core/util/DisableStupidWarnings.h>
+#include <suitesparse/SuiteSparseQR.hpp>
+#include <Eigen/src/CholmodSupport/CholmodSupport.h>
+#include "../Eigen_ext/SuiteSparseQRSupport_Ext.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -23,9 +30,12 @@
 
 using namespace Eigen;
 
+typedef int SparseDataType;
+//typedef SuiteSparse_long SparseDataType;
+
 template <int BlkRows, int BlkCols>
-struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
-	typedef Eigen::SparseFunctor<Scalar, int> Base;
+struct BaseFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
+	typedef Eigen::SparseFunctor<Scalar, SparseDataType> Base;
 	typedef typename Base::JacobianType JacobianType;
 
 	// Variables for optimization live in InputType
@@ -256,9 +266,12 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
 	typedef ColPivHouseholderQR<Matrix<Scalar, BlkRows, BlkCols> > DenseQRSolverSmallBlock;
 
 	// QR for J1 is block diagonal
-	typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > SparseSuperblockSolver;
-	typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseQRSolverSmallBlock> DiagonalSubblockSolver;
-	typedef SparseSubblockQR_Ext<JacobianType, DiagonalSubblockSolver, SparseSuperblockSolver> LeftSuperBlockSolver;
+	//typedef SparseQR_Ext<JacobianType, COLAMDOrdering<SparseDataType> > SparseSuperblockSolver;
+	//typedef SPQR<JacobianType> SparseSuperblockSolver;
+	//typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseQRSolverSmallBlock> DiagonalSubblockSolver;
+	//typedef SparseSubblockQR_Ext<JacobianType, DiagonalSubblockSolver, SparseSuperblockSolver> LeftSuperBlockSolver;
+	typedef SparseBandedQR_Ext<JacobianType, NaturalOrdering<SparseDataType> > LeftSuperBlockSolver;
+	//typedef SPQR<JacobianType> LeftSuperBlockSolver;
 
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
@@ -422,9 +435,10 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
 	}
 
 	void E_continuity(const InputType& x, ValueType &fvec, const Eigen::Index rowOffset, const Eigen::Index blockOffset) {
-		for (int i = 0; i < this->nDataPoints(); i++) {
-			fvec(rowOffset + i + blockOffset) = this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()));
+		for (int i = 0; i < this->nDataPoints() - 1; i++) {
+			fvec(rowOffset + i * this->rowStride + blockOffset) = this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()));
 		}
+		fvec(rowOffset + (this->nDataPoints() - 1) * this->rowStride + blockOffset) = 0;
 	}
 
 	/************ GRADIENTS ************/
@@ -757,10 +771,10 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, int> {
 			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
 			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
 			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 3, dist_duv(3));	// v2
-			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 0, dist_duv(0));	// u1
-			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
-			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
-			jvals.add(rowOffset + i + blockOffset + 0, colBase + 2 * i + 3, dist_duv(3));	// v2
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 0, dist_duv(0));	// u1
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
+			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 3, dist_duv(3));	// v2
 		}
 	}
 	/************ UPDATES ************/

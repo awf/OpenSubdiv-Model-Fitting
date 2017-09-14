@@ -358,8 +358,6 @@ void BlockSparseQR_Ext<MatrixType,BlockQRSolverLeft,BlockQRSolverRight>::factori
 
 	// '(Eigen::SparseQRMatrixQTransposeReturnType<SparseQRType>, const Eigen::Block<const Derived,-1,-1,true>)'
 	MatrixType XX = matBlock.rightCols(m2); // awf fixme this needs to be inlined in the next line
-
-	//clock_t begin = clock();
 	this->m_leftQ = m_leftSolver.matrixQ();
 	MatrixType A = this->m_leftQ.transpose() * XX;// *matBlock.rightCols(m2);
 

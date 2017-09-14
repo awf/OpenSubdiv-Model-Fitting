@@ -19,7 +19,7 @@ PosOnlyWithRegFunctor::PosOnlyWithRegFunctor(const Matrix3X& data_points, const 
 // 1. Evaluate the residuals at x
 void PosOnlyWithRegFunctor::f_impl(const InputType& x, ValueType& fvec) {
 	this->E_pos(x, data_points, fvec, 0, 0);
-	this->E_continuity(x, fvec, this->nDataPoints() * 3, 0);
+	this->E_continuity(x, fvec, 0, 3);
 	this->E_constraints(x, data_points, data_constraints, fvec, this->nDataPoints() * 3 + this->nDataPoints());
 	this->E_thinplate(x, fvec, this->nDataPoints() * 3 + this->nDataPoints() + this->nDataConstraints() * 3);
 }
@@ -38,7 +38,7 @@ void PosOnlyWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArray<Scal
 
 	// 2. Derivatives wrt correspondences
 	this->dE_pos_d_uv(x, jvals, ubase, 0, 0);
-	this->dE_continuity_d_uv(x, jvals, ubase, this->nDataPoints() * 3, 0);
+	this->dE_continuity_d_uv(x, jvals, ubase, 0, 3);
 
 	// 2. Derivatives wrt correspondences
 	this->dE_pos_d_rst(x, jvals, rst_base, 0, 0);

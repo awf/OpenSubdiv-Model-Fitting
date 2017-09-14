@@ -85,7 +85,9 @@ int main() {
 	spJ.setFromTriplets(jvals.begin(), jvals.end());
 	spJ.makeCompressed();
 
-	Logger::instance()->logMatrixCSV(spJ.toDense(), "spJ.csv");
+#ifndef _DEBUG
+//	Logger::instance()->logMatrixCSV(spJ.toDense(), "spJ.csv");
+#endif
 
 	/*
 	GeneralQRSolver slvr;
@@ -100,7 +102,8 @@ int main() {
 	*/
 
 	BandedQRSolver slvr;
-	slvr.setPruningEpsilon(1e-6);
+	//slvr.setPruningEpsilon(1e-16);
+	slvr.setPruningEpsilon(1e-8);
 	//slvr.setPruningEpsilon(1e-4);
 	slvr.setBlockParams(4, 2);
 	clock_t begin = clock();
@@ -111,8 +114,17 @@ int main() {
 	slvrQ.setIdentity();
 	slvrQ = slvr.matrixQ() * slvrQ;
 	std::cout << "Slvr Q elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
-	Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
+
+	std::cout << "Q * R - J  = " << (slvrQ.toDense() * slvr.matrixR().toDense() - spJ.toDense()).norm() << std::endl;
+	std::cout << "Qt * J - R = " << (slvrQ.toDense().transpose() * spJ.toDense() - slvr.matrixR().toDense()).norm() << std::endl;
+	JacobianType I(spJ.rows(), spJ.rows());
+	I.setIdentity();
+	std::cout << "Qt * Q - I = " << (slvrQ.toDense().transpose() * slvrQ.toDense() - I.toDense()).norm() << std::endl;
+
+#ifndef _DEBUG
+//	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
+//	Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
+#endif
 
 	return 0;
 
@@ -279,14 +291,15 @@ int main() {
 	*/
 
 	std::cout << "Elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-
+#ifndef _DEBUG
 	Logger::instance()->logMatrixCSV(R.toDense(), "R.csv");
 	Logger::instance()->logMatrixCSV(Q.toDense(), "Q.csv");
 	//Logger::instance()->logMatrixCSV(QQ.toDense(), "QQ.csv");
 
 	Logger::instance()->logMatrixCSV((res).toDense(), "QR.csv");
 	//Logger::instance()->logMatrixCSV((Q.transpose() * spJ).toDense(), "QtJ.csv");
-	
+#endif	
+
 	Logger::instance()->log(Logger::Info, "QR Diagonalization Test DONE!");
 
 	return 0;
