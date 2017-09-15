@@ -11,13 +11,17 @@
 #include <Eigen/SparseQR>
 
 #include <Eigen/SparseCore>
+#include <Eigen/src/Core/util/DisableStupidWarnings.h>
+#include <suitesparse/SuiteSparseQR.hpp>
+#include <Eigen/src/CholmodSupport/CholmodSupport.h>
+#include "Eigen_ext/SuiteSparseQRSupport_Ext.h"
 
 #include "Eigen_ext/eigen_extras.h"
 #include "Eigen_ext/SparseQR_Ext.h"
 #include "Eigen_ext/BlockSparseQR_Ext.h"
 #include "Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "Eigen_ext/SparseSubblockQR_Ext.h"
-#include "Eigen_ext/SparseBandedQR_Ext.h"
+#include "Eigen_ext/SparseBandedQR_Ext2.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -45,9 +49,9 @@ int main() {
 	typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
 	//typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
 	typedef SparseQR_Ext<JacobianType, NaturalOrdering<int> > GeneralQRSolver;
-	typedef SparseBandedQR_Ext<JacobianType, NaturalOrdering<int> > BandedQRSolver;
+	typedef SparseBandedQR_Ext2<JacobianType, NaturalOrdering<int> > BandedQRSolver;
 
-	JacobianTypeRowMajor spJ;
+	JacobianType spJ;
 	Eigen::TripletArray<Scalar, typename JacobianType::Index> jvals(64);
 	///*
 	for (int i = 0; i < numParams; i++) {
@@ -88,25 +92,39 @@ int main() {
 #ifndef _DEBUG
 //	Logger::instance()->logMatrixCSV(spJ.toDense(), "spJ.csv");
 #endif
-
+	clock_t begin;
 	/*
-	GeneralQRSolver slvr;
-	slvr.compute(spJ);
-	JacobianType slvrQ(spJ.rows(), spJ.rows());
-	slvrQ.setIdentity();
-	slvrQ = slvr.matrixQ() * slvrQ;
+	typedef SPQR<JacobianType> SPQRSolver;
+	SPQRSolver spqr;
+	begin = clock();
+	spqr.compute(spJ);
+	std::cout << "SPQR Compute elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	begin = clock();
+	SPQRSolver::MatrixType QSP(spJ.rows(), spJ.rows());
+	QSP.setIdentity();
+	//Eigen::MatrixXd q(spJSP.rows(), spJSP.rows());
+	//q.setIdentity();
+	//Eigen::MatrixXd res;
+	QSP = spqr.matrixQ() * QSP;
+	QSP.prune(Scalar(0));
+	std::cout << "SPQR MatrixQ elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	return 0;
+	*/
+	/*
 	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
 	Logger::instance()->logMatrixCSV(slvr.matrixQ2().toDense(), "slvrQ2.csv");
 	Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
-
+	
 	*/
 
 	BandedQRSolver slvr;
-	//slvr.setPruningEpsilon(1e-16);
-	slvr.setPruningEpsilon(1e-8);
-	//slvr.setPruningEpsilon(1e-4);
+	//slvr.setRoundoffEpsilon(1e-16);
+	//slvr.setRoundoffEpsilon(1e-12);
+	slvr.setRoundoffEpsilon(1e-16);
 	slvr.setBlockParams(4, 2);
-	clock_t begin = clock();
+	begin = clock();
 	slvr.compute(spJ);
 	std::cout << "Slvr compute elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 	begin = clock();
@@ -115,14 +133,15 @@ int main() {
 	slvrQ = slvr.matrixQ() * slvrQ;
 	std::cout << "Slvr Q elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
-	std::cout << "Q * R - J  = " << (slvrQ.toDense() * slvr.matrixR().toDense() - spJ.toDense()).norm() << std::endl;
-	std::cout << "Qt * J - R = " << (slvrQ.toDense().transpose() * spJ.toDense() - slvr.matrixR().toDense()).norm() << std::endl;
+	std::cout << "||Q * R - J||_2  = " << (slvrQ * slvr.matrixR() - spJ).norm() << std::endl;
+	std::cout << "||Qt * J - R||_2 = " << (slvrQ.transpose() * spJ - slvr.matrixR()).norm() << std::endl;
 	JacobianType I(spJ.rows(), spJ.rows());
 	I.setIdentity();
-	std::cout << "Qt * Q - I = " << (slvrQ.toDense().transpose() * slvrQ.toDense() - I.toDense()).norm() << std::endl;
+	std::cout << "||Qt * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 
 #ifndef _DEBUG
 //	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
+//	Logger::instance()->logMatrixCSV(slvr.matrixH().toDense(), "slvrH.csv");
 //	Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
 #endif
 

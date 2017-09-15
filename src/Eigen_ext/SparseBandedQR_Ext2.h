@@ -7,23 +7,23 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#ifndef EIGEN_SPARSE_BANDED_QR_EXT_H
-#define EIGEN_SPARSE_BANDED_QR_EXT_H
+#ifndef EIGEN_SPARSE_BANDED_QR_EXT2_H
+#define EIGEN_SPARSE_BANDED_QR_EXT2_H
 
 #include <ctime>
 
 namespace Eigen {
 
-	template<typename MatrixType, typename OrderingType> class SparseBandedQR_Ext;
-	template<typename SparseBandedQR_ExtType> struct SparseBandedQR_ExtMatrixQReturnType;
-	template<typename SparseBandedQR_ExtType> struct SparseBandedQR_ExtMatrixQTransposeReturnType;
-	template<typename SparseBandedQR_ExtType, typename Derived> struct SparseBandedQR_Ext_QProduct;
+	template<typename MatrixType, typename OrderingType> class SparseBandedQR_Ext2;
+	template<typename SparseBandedQR_Ext2Type> struct SparseBandedQR_Ext2MatrixQReturnType;
+	template<typename SparseBandedQR_Ext2Type> struct SparseBandedQR_Ext2MatrixQTransposeReturnType;
+	template<typename SparseBandedQR_Ext2Type, typename Derived> struct SparseBandedQR_Ext2_QProduct;
 	namespace internal {
 
-		// traits<SparseBandedQR_ExtMatrixQ[Transpose]>
-		template <typename SparseBandedQR_ExtType> struct traits<SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType> >
+		// traits<SparseBandedQR_Ext2MatrixQ[Transpose]>
+		template <typename SparseBandedQR_Ext2Type> struct traits<SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type> >
 		{
-			typedef typename SparseBandedQR_ExtType::MatrixType ReturnType;
+			typedef typename SparseBandedQR_Ext2Type::MatrixType ReturnType;
 			typedef typename ReturnType::StorageIndex StorageIndex;
 			typedef typename ReturnType::StorageKind StorageKind;
 			enum {
@@ -32,29 +32,29 @@ namespace Eigen {
 			};
 		};
 
-		template <typename SparseBandedQR_ExtType> struct traits<SparseBandedQR_ExtMatrixQTransposeReturnType<SparseBandedQR_ExtType> >
+		template <typename SparseBandedQR_Ext2Type> struct traits<SparseBandedQR_Ext2MatrixQTransposeReturnType<SparseBandedQR_Ext2Type> >
 		{
-			typedef typename SparseBandedQR_ExtType::MatrixType ReturnType;
+			typedef typename SparseBandedQR_Ext2Type::MatrixType ReturnType;
 		};
 
-		template <typename SparseBandedQR_ExtType, typename Derived> struct traits<SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, Derived> >
+		template <typename SparseBandedQR_Ext2Type, typename Derived> struct traits<SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, Derived> >
 		{
 			typedef typename Derived::PlainObject ReturnType;
 		};
 
-		// SparseBandedQR_Ext_traits
-		template <typename T> struct SparseBandedQR_Ext_traits {  };
-		template <class T, int Rows, int Cols, int Options> struct SparseBandedQR_Ext_traits<Matrix<T, Rows, Cols, Options>> {
+		// SparseBandedQR_Ext2_traits
+		template <typename T> struct SparseBandedQR_Ext2_traits {  };
+		template <class T, int Rows, int Cols, int Options> struct SparseBandedQR_Ext2_traits<Matrix<T, Rows, Cols, Options>> {
 			typedef Matrix<T, Rows, 1, Options> Vector;
 		};
-		template <class Scalar, int Options, typename Index> struct SparseBandedQR_Ext_traits<SparseMatrix<Scalar, Options, Index>> {
+		template <class Scalar, int Options, typename Index> struct SparseBandedQR_Ext2_traits<SparseMatrix<Scalar, Options, Index>> {
 			typedef SparseVector<Scalar, Options> Vector;
 		};
 	} // End namespace internal
 
 	/**
-	  * \ingroup SparseBandedQR_Ext_Module
-	  * \class SparseBandedQR_Ext
+	  * \ingroup SparseBandedQR_Ext2_Module
+	  * \class SparseBandedQR_Ext2
 	  * \brief Sparse Householder QR Factorization for banded matrices
 	  * This implementation is not rank revealing and uses Eigen::HouseholderQR for solving the dense blocks.
 	  *
@@ -75,10 +75,10 @@ namespace Eigen {
 	  *
 	  */
 	template<typename _MatrixType, typename _OrderingType>
-	class SparseBandedQR_Ext : public SparseSolverBase<SparseBandedQR_Ext<_MatrixType, _OrderingType> >
+	class SparseBandedQR_Ext2 : public SparseSolverBase<SparseBandedQR_Ext2<_MatrixType, _OrderingType> >
 	{
 	protected:
-		typedef SparseSolverBase<SparseBandedQR_Ext<_MatrixType, _OrderingType> > Base;
+		typedef SparseSolverBase<SparseBandedQR_Ext2<_MatrixType, _OrderingType> > Base;
 		using Base::m_isInitialized;
 	public:
 		using Base::_solve_impl;
@@ -90,7 +90,7 @@ namespace Eigen {
 		typedef Matrix<StorageIndex, Dynamic, 1> IndexVector;
 		typedef Matrix<Scalar, Dynamic, 1> ScalarVector;
 
-		typedef SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_Ext> MatrixQType;
+		typedef SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2> MatrixQType;
 		typedef SparseMatrix<Scalar, ColMajor, StorageIndex> MatrixRType;
 		typedef PermutationMatrix<Dynamic, Dynamic, StorageIndex> PermutationType;
 
@@ -100,7 +100,7 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBandedQR_Ext() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isQSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
+		SparseBandedQR_Ext2() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isQSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
 		{ }
 
 		/** Construct a QR factorization of the matrix \a mat.
@@ -109,7 +109,7 @@ namespace Eigen {
 		  *
 		  * \sa compute()
 		  */
-		explicit SparseBandedQR_Ext(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isQSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
+		explicit SparseBandedQR_Ext2(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isQSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
 		{
 			compute(mat);
 		}
@@ -172,16 +172,16 @@ namespace Eigen {
 		* To get a plain SparseMatrix representation of Q:
 		* \code
 		* SparseMatrix<double> Q;
-		* Q = SparseBandedQR_Ext<SparseMatrix<double> >(A).matrixQ();
+		* Q = SparseBandedQR_Ext2<SparseMatrix<double> >(A).matrixQ();
 		* \endcode
 		* Internally, this call simply performs a sparse product between the matrix Q
 		* and a sparse identity matrix. However, due to the fact that the sparse
 		* reflectors are stored unsorted, two transpositions are needed to sort
 		* them before performing the product.
 		*/
-		SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_Ext> matrixQ() const
+		SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2> matrixQ() const
 		{
-			return SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_Ext>(*this);
+			return SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2>(*this);
 		}
 
 		// Return the matrix of householder vectors
@@ -217,7 +217,7 @@ namespace Eigen {
 		bool _solve_impl(const MatrixBase<Rhs> &B, MatrixBase<Dest> &dest) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			eigen_assert(this->rows() == B.rows() && "SparseBandedQR_Ext::solve() : invalid number of rows in the right hand side matrix");
+			eigen_assert(this->rows() == B.rows() && "SparseBandedQR_Ext2::solve() : invalid number of rows in the right hand side matrix");
 
 			Index rank = this->rank();
 
@@ -253,18 +253,18 @@ namespace Eigen {
 		  * \sa compute()
 		  */
 		template<typename Rhs>
-		inline const Solve<SparseBandedQR_Ext, Rhs> solve(const MatrixBase<Rhs>& B) const
+		inline const Solve<SparseBandedQR_Ext2, Rhs> solve(const MatrixBase<Rhs>& B) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			eigen_assert(this->rows() == B.rows() && "SparseBandedQR_Ext::solve() : invalid number of rows in the right hand side matrix");
-			return Solve<SparseBandedQR_Ext, Rhs>(*this, B.derived());
+			eigen_assert(this->rows() == B.rows() && "SparseBandedQR_Ext2::solve() : invalid number of rows in the right hand side matrix");
+			return Solve<SparseBandedQR_Ext2, Rhs>(*this, B.derived());
 		}
 		template<typename Rhs>
-		inline const Solve<SparseBandedQR_Ext, Rhs> solve(const SparseMatrixBase<Rhs>& B) const
+		inline const Solve<SparseBandedQR_Ext2, Rhs> solve(const SparseMatrixBase<Rhs>& B) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			eigen_assert(this->rows() == B.rows() && "SparseBandedQR_Ext::solve() : invalid number of rows in the right hand side matrix");
-			return Solve<SparseBandedQR_Ext, Rhs>(*this, B.derived());
+			eigen_assert(this->rows() == B.rows() && "SparseBandedQR_Ext2::solve() : invalid number of rows in the right hand side matrix");
+			return Solve<SparseBandedQR_Ext2, Rhs>(*this, B.derived());
 		}
 
 		/** \brief Reports whether previous computation was successful.
@@ -314,7 +314,7 @@ namespace Eigen {
 		Index m_blockRows;
 		Index m_blockCols;
 
-		template <typename, typename > friend struct SparseBandedQR_Ext_QProduct;
+		template <typename, typename > friend struct SparseBandedQR_Ext2_QProduct;
 
 	};
 
@@ -328,16 +328,16 @@ namespace Eigen {
 	  * \note In this step it is assumed that there is no empty row in the matrix \a mat.
 	  */
 	template <typename MatrixType, typename OrderingType>
-	void SparseBandedQR_Ext<MatrixType, OrderingType>::analyzePattern(const MatrixType& mat)
+	void SparseBandedQR_Ext2<MatrixType, OrderingType>::analyzePattern(const MatrixType& mat)
 	{
 		Index n = mat.cols();
 		Index m = mat.rows();
 		Index diagSize = (std::min)(m, n);
 
-		m_Q.resize(mat.rows(), mat.cols());
+		m_Q.resize(mat.rows(), mat.cols() * 2 - 2);
 		m_R.resize(mat.rows(), mat.cols());
 
-		m_hcoeffs.resize(diagSize);
+		m_hcoeffs.resize(mat.cols() * 2 - 2);
 
 		m_analysisIsok = true;
 	}
@@ -359,13 +359,13 @@ void householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, 
 
 /** \brief Performs the numerical QR factorization of the input matrix
   *
-  * The function SparseBandedQR_Ext::analyzePattern(const MatrixType&) must have been called beforehand with
+  * The function SparseBandedQR_Ext2::analyzePattern(const MatrixType&) must have been called beforehand with
   * a matrix having the same sparsity pattern than \a mat.
   *
   * \param mat The sparse column-major matrix
   */
 template <typename MatrixType, typename OrderingType>
-void SparseBandedQR_Ext<MatrixType, OrderingType>::factorize(const MatrixType& mat)
+void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& mat)
 {
 	// Not rank-revealing, column permutation is identity
 	m_outputPerm_c.setIdentity(mat.cols());
@@ -381,7 +381,7 @@ void SparseBandedQR_Ext<MatrixType, OrderingType>::factorize(const MatrixType& m
 	Index blockRows = m_blockRows;
 	Index blockCols = m_blockCols;
 	Index numBlocks = mat.cols() / blockCols;
-	DenseMatrixType Ji = mat.block(0, 0, blockRows, blockCols);
+	DenseMatrixType Ji = mat.block(0, 0, blockRows, blockCols * 2);
 	DenseMatrixType Ji2;
 	DenseMatrixType tmp;
 
@@ -390,67 +390,54 @@ void SparseBandedQR_Ext<MatrixType, OrderingType>::factorize(const MatrixType& m
 	//#define NNZ_ROWS (m_blockRows * 12)
 	//#define NNZ_ROWS (m_blockRows * 16)	
 	//#define NNZ_ROWS (m_blockRows * 24)	
-	#define NNZ_ROWS (m_blockRows * 32)	
+	#define NNZ_ROWS (m_blockRows * 2)	
 
 	int numZeros = 0;				// Number of implicitly zero-ed rows
 	int activeRows = blockRows;		// Number of non-zero rows for implicit zero-ing
 	for (Index i = 0; i < numBlocks; i++) {
 		// Where does the current block start
 		Index bs = i * blockCols;
+		Index bsh = i * (blockCols * 2);
 
 		// Solve dense block using Householder QR
 		houseqr.compute(Ji);
 
+		//std::cout << houseqr.matrixQR() << std::endl;
+
+		// If it is the last block, it's just two columns
+		int currBlockCols = (i == numBlocks - 1) ? blockCols : blockCols * 2;
+
 		// Update Q and Householder coefficients
-		MatrixXd H = MatrixXd::Zero(activeRows, blockCols);
-		for(int bc = 0; bc < blockCols; bc++) {
+		MatrixXd H = MatrixXd::Zero(activeRows, currBlockCols);
+		for(int bc = 0; bc < currBlockCols; bc++) {
 			H(bc, bc) = 1.0;
 			H.block(bc + 1, bc, houseqr.householderQ().essentialVector(bc).rows(), 1) = houseqr.householderQ().essentialVector(bc);
 
-			m_hcoeffs(bs + bc) = houseqr.hCoeffs()(bc);
+			m_hcoeffs(bsh + bc) = houseqr.hCoeffs()(bc);
 		}
-		H.unaryExpr([](double x) { return (std::abs(x) < 1e-8) ? 0 : x; });
-		for (int bc = 0; bc < blockCols; bc++) {
-			Qvals.add_if_nonzero(bs + bc, bs + bc, H(bc, bc));
+		//H.unaryExpr([](double x) { return (std::abs(x) < 1e-8) ? 0 : x; });
+		for (int bc = 0; bc < currBlockCols; bc++) {
+			Qvals.add_if_nonzero(bs + bc, bsh + bc, H(bc, bc));
 			for (int r = bc + 1; r < activeRows; r++) {
-				Qvals.add_if_nonzero(bs + r + numZeros, bs + bc, H(r, bc));
+				Qvals.add_if_nonzero(bs + r + numZeros, bsh + bc, H(r, bc));
 			}
 		}
 
 		// Update R
-		// For the last block
-		if (i == numBlocks - 1) {
-			// Multiplication by the householder vectors
-			MatrixXd V = Ji;
-			householder_product_transposed(H, houseqr.hCoeffs(), V);
-			
-			tmp = V;
+		// Multiplication by the householder vectors
+		MatrixXd V = Ji;
+		householder_product_transposed(H, houseqr.hCoeffs(), V);
 
-			for (int br = 0; br < blockCols; br++) {
-				for (int bc = 0; bc < blockCols; bc++) {
-					Rvals.add_if_nonzero(bs + br, bs + bc, tmp(br, bc));
-				}
+		tmp = V;
+
+		//tmp.unaryExpr([](double x) { return (std::abs(x) < 1e-8) ? 0 : x; });
+		for (int br = 0; br < blockCols; br++) {
+			for (int bc = 0; bc < currBlockCols; bc++) {
+				Rvals.add_if_nonzero(bs + br, bs + bc, tmp(br, bc));
 			}
 		}
-		// For any other block
-		else {
-			// Multiplication by the householder vectors
-			MatrixXd Vleft = Ji;
-			MatrixXd Vright = mat.block(bs + numZeros, bs + blockCols, activeRows, blockCols).toDense();
 
-			householder_product_transposed(H, houseqr.hCoeffs(), Vleft);
-			householder_product_transposed(H, houseqr.hCoeffs(), Vright);
-
-			tmp = DenseMatrixType::Zero(activeRows, blockCols * 2);
-			tmp.leftCols(blockCols) = Vleft;
-			tmp.rightCols(blockCols) = Vright;
-			
-			for (int br = 0; br < blockCols; br++) {
-				for (int bc = 0; bc < blockCols * 2; bc++) {
-					Rvals.add_if_nonzero(bs + br, bs + bc, tmp(br, bc));
-				}
-			}
-
+		if (i < numBlocks - 1) {
 			// Update block rows
 			blockRows += blockCols;
 
@@ -460,14 +447,23 @@ void SparseBandedQR_Ext<MatrixType, OrderingType>::factorize(const MatrixType& m
 				activeRows = NNZ_ROWS;
 
 				// Update Ji accordingly
-				Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols).toDense();
-				Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols * 2, blockCols, activeRows - blockCols * 2, blockCols);
+				if (i < numBlocks - 2) {
+					Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols * 2).toDense();
+				//	std::cout << Ji << "\n-- Ji --\n";
+
+//					std::cout << tmp << "\n-- tmp --\n";
+					Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, activeRows - blockCols * 2, blockCols);
+	//				std::cout << Ji << "\n-- Jia --\n";
+				} else {
+					Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols).toDense();
+					Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, activeRows - blockCols * 2, blockCols);
+				}
 			} else {
 				numZeros = 0;
 				activeRows = blockRows;
 
 				// Update Ji accordingly
-				Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols).toDense();
+				Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols * 2).toDense();
 				Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, activeRows - blockCols * 2, blockCols);
 			}
 		}
@@ -487,17 +483,17 @@ void SparseBandedQR_Ext<MatrixType, OrderingType>::factorize(const MatrixType& m
   m_info = Success;
 }
 
-// xxawf boilerplate all this into BlockSparseBandedQR_Ext...
-template <typename SparseBandedQR_ExtType, typename Derived>
-struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, Derived> >
+// xxawf boilerplate all this into BlockSparseBandedQR_Ext2...
+template <typename SparseBandedQR_Ext2Type, typename Derived>
+struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, Derived> >
 {
-  typedef typename SparseBandedQR_ExtType::MatrixType MatrixType;
-  typedef typename SparseBandedQR_ExtType::Scalar Scalar;
+  typedef typename SparseBandedQR_Ext2Type::MatrixType MatrixType;
+  typedef typename SparseBandedQR_Ext2Type::Scalar Scalar;
 
-  typedef typename internal::SparseBandedQR_Ext_traits<MatrixType>::Vector SparseVector;
+  typedef typename internal::SparseBandedQR_Ext2_traits<MatrixType>::Vector SparseVector;
 
   // Get the references 
-  SparseBandedQR_Ext_QProduct(const SparseBandedQR_ExtType& qr, const Derived& other, bool transpose) : 
+  SparseBandedQR_Ext2_QProduct(const SparseBandedQR_Ext2Type& qr, const Derived& other, bool transpose) : 
   m_qr(qr),m_other(other),m_transpose(transpose) {}
   inline Index rows() const { return m_transpose ? m_qr.rows() : m_qr.cols(); }
   inline Index cols() const { return m_other.cols(); }
@@ -508,7 +504,7 @@ struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<S
   {
     Index m = m_qr.rows();
     Index n = m_qr.cols();
-    Index diagSize = (std::min)(m,n);
+	Index diagSize = m_qr.m_Q.cols();//(std::min)(m,n);
 	res = m_other;
 
 	//clock_t begin = clock();
@@ -519,6 +515,7 @@ struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<S
 #define IS_ZERO(x, eps) (std::abs(x) < eps)
 
 	SparseVector resColJ;
+	const Scalar Zero = Scalar(0);
 	Scalar tau = Scalar(0);
     if (m_transpose)
     {
@@ -530,6 +527,7 @@ struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<S
 			for (Index k = 0; k < diagSize; k++) {
 				// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
 				tau = m_qr.m_Q.col(k).dot(resColJ);
+				//if(tau == Zero)
 				if (IS_ZERO(tau, m_qr.m_eps))
 					continue;
 				tau = tau * m_qr.m_hcoeffs(k);
@@ -550,6 +548,7 @@ struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<S
 			resColJ = res.col(j);
 			for (Index k = diagSize - 1; k >= 0; k--) {
 				tau = m_qr.m_Q.col(k).dot(resColJ);
+				//if (tau == Zero)
 				if (IS_ZERO(tau, m_qr.m_eps))
 					continue;
 				tau = tau * m_qr.m_hcoeffs(k);
@@ -567,77 +566,77 @@ struct SparseBandedQR_Ext_QProduct : ReturnByValue<SparseBandedQR_Ext_QProduct<S
 
 	//std::cout << "Elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
   }
-  const SparseBandedQR_ExtType& m_qr;
+  const SparseBandedQR_Ext2Type& m_qr;
   const Derived& m_other;
   bool m_transpose;
 };
 
-template<typename SparseBandedQR_ExtType>
-struct SparseBandedQR_ExtMatrixQReturnType : public EigenBase<SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType> >
+template<typename SparseBandedQR_Ext2Type>
+struct SparseBandedQR_Ext2MatrixQReturnType : public EigenBase<SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type> >
 {  
-  typedef typename SparseBandedQR_ExtType::Scalar Scalar;
+  typedef typename SparseBandedQR_Ext2Type::Scalar Scalar;
   typedef Matrix<Scalar,Dynamic,Dynamic> DenseMatrix;
   enum {
     RowsAtCompileTime = Dynamic,
     ColsAtCompileTime = Dynamic
   };
-  explicit SparseBandedQR_ExtMatrixQReturnType(const SparseBandedQR_ExtType& qr) : m_qr(qr) {}
+  explicit SparseBandedQR_Ext2MatrixQReturnType(const SparseBandedQR_Ext2Type& qr) : m_qr(qr) {}
   template<typename Derived>
-  SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, Derived> operator*(const MatrixBase<Derived>& other)
+  SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, Derived> operator*(const MatrixBase<Derived>& other)
   {
-    return SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType,Derived>(m_qr,other.derived(),false);
+    return SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type,Derived>(m_qr,other.derived(),false);
   }
   template<typename _Scalar, int _Options, typename _Index>
-  SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
+  SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
   {
-    return SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, false);
+    return SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, false);
   }
-  SparseBandedQR_ExtMatrixQTransposeReturnType<SparseBandedQR_ExtType> adjoint() const
+  SparseBandedQR_Ext2MatrixQTransposeReturnType<SparseBandedQR_Ext2Type> adjoint() const
   {
-    return SparseBandedQR_ExtMatrixQTransposeReturnType<SparseBandedQR_ExtType>(m_qr);
+    return SparseBandedQR_Ext2MatrixQTransposeReturnType<SparseBandedQR_Ext2Type>(m_qr);
   }
   inline Index rows() const { return m_qr.rows(); }
   inline Index cols() const { return m_qr.rows(); }
   // To use for operations with the transpose of Q
-  SparseBandedQR_ExtMatrixQTransposeReturnType<SparseBandedQR_ExtType> transpose() const
+  SparseBandedQR_Ext2MatrixQTransposeReturnType<SparseBandedQR_Ext2Type> transpose() const
   {
-    return SparseBandedQR_ExtMatrixQTransposeReturnType<SparseBandedQR_ExtType>(m_qr);
+    return SparseBandedQR_Ext2MatrixQTransposeReturnType<SparseBandedQR_Ext2Type>(m_qr);
   }
 
-  const SparseBandedQR_ExtType& m_qr;
+  const SparseBandedQR_Ext2Type& m_qr;
 };
 
-template<typename SparseBandedQR_ExtType>
-struct SparseBandedQR_ExtMatrixQTransposeReturnType
+template<typename SparseBandedQR_Ext2Type>
+struct SparseBandedQR_Ext2MatrixQTransposeReturnType
 {
-  explicit SparseBandedQR_ExtMatrixQTransposeReturnType(const SparseBandedQR_ExtType& qr) : m_qr(qr) {}
+  explicit SparseBandedQR_Ext2MatrixQTransposeReturnType(const SparseBandedQR_Ext2Type& qr) : m_qr(qr) {}
   template<typename Derived>
-  SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, Derived> operator*(const MatrixBase<Derived>& other)
+  SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, Derived> operator*(const MatrixBase<Derived>& other)
   {
-    return SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, Derived>(m_qr, other.derived(), true);
+    return SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, Derived>(m_qr, other.derived(), true);
   }
   template<typename _Scalar, int _Options, typename _Index>
-  SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar,_Options,_Index>& other)
+  SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar,_Options,_Index>& other)
   {
-    return SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, true);
+    return SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, true);
   }
-  const SparseBandedQR_ExtType& m_qr;
+  const SparseBandedQR_Ext2Type& m_qr;
 };
 
 namespace internal {
   
-template<typename SparseBandedQR_ExtType>
-struct evaluator_traits<SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType> >
+template<typename SparseBandedQR_Ext2Type>
+struct evaluator_traits<SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type> >
 {
-  typedef typename SparseBandedQR_ExtType::MatrixType MatrixType;
+  typedef typename SparseBandedQR_Ext2Type::MatrixType MatrixType;
   typedef typename storage_kind_to_evaluator_kind<typename MatrixType::StorageKind>::Kind Kind;
   typedef SparseShape Shape;
 };
 
-template< typename DstXprType, typename SparseBandedQR_ExtType>
-struct Assignment<DstXprType, SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType>, internal::assign_op<typename DstXprType::Scalar,typename DstXprType::Scalar>, Sparse2Sparse>
+template< typename DstXprType, typename SparseBandedQR_Ext2Type>
+struct Assignment<DstXprType, SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type>, internal::assign_op<typename DstXprType::Scalar,typename DstXprType::Scalar>, Sparse2Sparse>
 {
-  typedef SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType> SrcXprType;
+  typedef SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type> SrcXprType;
   typedef typename DstXprType::Scalar Scalar;
   typedef typename DstXprType::StorageIndex StorageIndex;
   static void run(DstXprType &dst, const SrcXprType &src, const internal::assign_op<Scalar,Scalar> &/*func*/)
@@ -645,15 +644,15 @@ struct Assignment<DstXprType, SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR
     typename DstXprType::PlainObject idMat(src.m_qr.rows(), src.m_qr.rows());
     idMat.setIdentity();
     // Sort the sparse householder reflectors if needed
-    const_cast<SparseBandedQR_ExtType *>(&src.m_qr)->_sort_matrix_Q();
-    dst = SparseBandedQR_Ext_QProduct<SparseBandedQR_ExtType, DstXprType>(src.m_qr, idMat, false);
+    const_cast<SparseBandedQR_Ext2Type *>(&src.m_qr)->_sort_matrix_Q();
+    dst = SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, DstXprType>(src.m_qr, idMat, false);
   }
 };
 
-template< typename DstXprType, typename SparseBandedQR_ExtType>
-struct Assignment<DstXprType, SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType>, internal::assign_op<typename DstXprType::Scalar,typename DstXprType::Scalar>, Sparse2Dense>
+template< typename DstXprType, typename SparseBandedQR_Ext2Type>
+struct Assignment<DstXprType, SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type>, internal::assign_op<typename DstXprType::Scalar,typename DstXprType::Scalar>, Sparse2Dense>
 {
-  typedef SparseBandedQR_ExtMatrixQReturnType<SparseBandedQR_ExtType> SrcXprType;
+  typedef SparseBandedQR_Ext2MatrixQReturnType<SparseBandedQR_Ext2Type> SrcXprType;
   typedef typename DstXprType::Scalar Scalar;
   typedef typename DstXprType::StorageIndex StorageIndex;
   static void run(DstXprType &dst, const SrcXprType &src, const internal::assign_op<Scalar,Scalar> &/*func*/)
