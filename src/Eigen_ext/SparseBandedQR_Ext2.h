@@ -100,7 +100,7 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBandedQR_Ext2() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isQSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
+		SparseBandedQR_Ext2() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
 		{ }
 
 		/** Construct a QR factorization of the matrix \a mat.
@@ -109,7 +109,7 @@ namespace Eigen {
 		  *
 		  * \sa compute()
 		  */
-		explicit SparseBandedQR_Ext2(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isQSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
+		explicit SparseBandedQR_Ext2(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
 		{
 			compute(mat);
 		}
@@ -187,7 +187,7 @@ namespace Eigen {
 
 		// Return the matrix of householder vectors
 		const MatrixRType& matrixH() const {
-			return this->m_Q;
+			return this->m_H;
 		}
 
 		void setRoundoffEpsilon(const RealScalar &_eps) {
@@ -286,11 +286,11 @@ namespace Eigen {
 		/** \internal */
 		inline void _sort_matrix_Q()
 		{
-			if (this->m_isQSorted) return;
+			if (this->m_isHSorted) return;
 			// The matrix Q is sorted during the transposition
-			SparseMatrix<Scalar, RowMajor, Index> mQrm(this->m_Q);
-			this->m_Q = mQrm;
-			this->m_isQSorted = true;
+			SparseMatrix<Scalar, RowMajor, Index> mHrm(this->m_H);
+			this->m_H = mHrm;
+			this->m_isHSorted = true;
 		}
 
 
@@ -302,14 +302,14 @@ namespace Eigen {
 		mutable ComputationInfo m_info;
 		std::string m_lastError;
 		MatrixQStorageType m_pmat;            // Temporary matrix
-		MatrixRType m_R;               // The triangular factor matrix
-		MatrixQStorageType m_Q;               // The orthogonal reflectors
+		MatrixRType m_R;                // The triangular factor matrix
+		MatrixQStorageType m_H;         // Matrix of the Householder reflectors
 		ScalarVector m_hcoeffs;         // The Householder coefficients
 		PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
 		RealScalar m_threshold;         // Threshold to determine null Householder reflections
 		bool m_useDefaultThreshold;     // Use default threshold
 		Index m_nonzeropivots;          // Number of non zero pivots found
-		bool m_isQSorted;               // whether Q is sorted or not
+		bool m_isHSorted;               // whether Q is sorted or not
 		RealScalar m_eps;
 
 		Index m_blockRows;
@@ -335,7 +335,7 @@ namespace Eigen {
 		Index m = mat.rows();
 		Index diagSize = (std::min)(m, n);
 
-		m_Q.resize(mat.rows(), mat.cols() * 2 - 2);
+		m_H.resize(mat.rows(), mat.cols() * 2 - 2);
 		m_R.resize(mat.rows(), mat.cols());
 
 		m_hcoeffs.resize(mat.cols() * 2 - 2);
@@ -463,11 +463,11 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 	}
   
   // Finalize the column pointers of the sparse matrices R and Q
-  m_Q.setFromTriplets(Qvals.begin(), Qvals.end());
-  m_Q.makeCompressed();
+  m_H.setFromTriplets(Qvals.begin(), Qvals.end());
+  m_H.makeCompressed();
   m_R.setFromTriplets(Rvals.begin(), Rvals.end());
   m_R.makeCompressed();
-  m_isQSorted = false;
+  m_isHSorted = false;
 
   m_nonzeropivots = m_R.cols();	// Assuming all cols are nonzero
 
@@ -499,7 +499,7 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
   {
     Index m = m_qr.rows();
     Index n = m_qr.cols();
-	Index diagSize = m_qr.m_Q.cols();//(std::min)(m,n);
+	Index diagSize = m_qr.m_H.cols();//(std::min)(m,n);
 	res = m_other;
 
 	//clock_t begin = clock();
@@ -514,7 +514,7 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 	Scalar tau = Scalar(0);
     if (m_transpose)
     {
-		eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+		eigen_assert(m_qr.m_H.rows() == m_other.rows() && "Non conforming object sizes");
 
 #ifdef MULTITHREADED
 		// Compute res = Q' * other column by column using parallel for loop
@@ -537,13 +537,13 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 							resColJ = res.col(j);
 							for (Index k = 0; k < diagSize; k++) {
 								// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
-								tau = m_qr.m_Q.col(k).dot(resColJ);
+								tau = m_qr.m_H.col(k).dot(resColJ);
 								//if(tau == Zero)
 								if (IS_ZERO(tau, m_qr.m_eps)) {
 									continue;
 								}
 								tau = tau * m_qr.m_hcoeffs(k);
-								resColJ -= tau *  m_qr.m_Q.col(k);
+								resColJ -= tau *  m_qr.m_H.col(k);
 							}
 
 							std::lock_guard<std::mutex> lock(critical);
@@ -565,13 +565,13 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 			resColJ = res.col(j);
 			for (Index k = 0; k < diagSize; k++) {
 				// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
-				tau = m_qr.m_Q.col(k).dot(resColJ);
+				tau = m_qr.m_H.col(k).dot(resColJ);
 				//if(tau == Zero)
 				if (IS_ZERO(tau, m_qr.m_eps)) {
 					continue;
 				}
 				tau = tau * m_qr.m_hcoeffs(k);
-				resColJ -= tau *  m_qr.m_Q.col(k);
+				resColJ -= tau *  m_qr.m_H.col(k);
 			}
 			// Write the result back to j-th column of res
 			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
@@ -582,7 +582,7 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
     }
     else
     {
-		eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+		eigen_assert(m_qr.m_H.rows() == m_other.rows() && "Non conforming object sizes");
 
 		// Compute res = Q * other column by column using parallel for loop
 #ifdef MULTITHREADED
@@ -604,13 +604,13 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 							SparseVector resColJ;
 							resColJ = res.col(j);
 							for (Index k = diagSize - 1; k >= 0; k--) {
-								tau = m_qr.m_Q.col(k).dot(resColJ);
+								tau = m_qr.m_H.col(k).dot(resColJ);
 								//if (tau == Zero)
 								if (IS_ZERO(tau, m_qr.m_eps)) {
 									continue;
 								}
 								tau = tau * m_qr.m_hcoeffs(k);
-								resColJ -= tau *  m_qr.m_Q.col(k);
+								resColJ -= tau *  m_qr.m_H.col(k);
 							}
 
 							std::lock_guard<std::mutex> lock(critical);
@@ -631,13 +631,13 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 			// Use temporary vector resColJ inside of the for loop - faster access
 			resColJ = res.col(j);
 			for (Index k = diagSize - 1; k >= 0; k--) {
-				tau = m_qr.m_Q.col(k).dot(resColJ);
+				tau = m_qr.m_H.col(k).dot(resColJ);
 				//if (tau == Zero)
 				if (IS_ZERO(tau, m_qr.m_eps)) {
 					continue;
 				}
 				tau = tau * m_qr.m_hcoeffs(k);
-				resColJ -= tau *  m_qr.m_Q.col(k);
+				resColJ -= tau *  m_qr.m_H.col(k);
 			}
 			// Write the result back to j-th column of res
 			for (SparseVector::InnerIterator it(resColJ); it; ++it) {

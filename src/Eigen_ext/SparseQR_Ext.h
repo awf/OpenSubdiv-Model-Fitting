@@ -108,7 +108,7 @@ class SparseQR_Ext : public SparseSolverBase<SparseQR_Ext<_MatrixType,_OrderingT
     };
     
   public:
-    SparseQR_Ext () :  m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true),m_isQSorted(false),m_isEtreeOk(false)
+    SparseQR_Ext () :  m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true),m_isHSorted(false),m_isEtreeOk(false)
     { }
     
     /** Construct a QR factorization of the matrix \a mat.
@@ -117,7 +117,7 @@ class SparseQR_Ext : public SparseSolverBase<SparseQR_Ext<_MatrixType,_OrderingT
       * 
       * \sa compute()
       */
-    explicit SparseQR_Ext(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true),m_isQSorted(false),m_isEtreeOk(false)
+    explicit SparseQR_Ext(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true),m_isHSorted(false),m_isEtreeOk(false)
     {
       compute(mat);
     }
@@ -280,11 +280,11 @@ class SparseQR_Ext : public SparseSolverBase<SparseQR_Ext<_MatrixType,_OrderingT
     /** \internal */
     inline void _sort_matrix_Q()
     {
-      if(this->m_isQSorted) return;
+      if(this->m_isHSorted) return;
       // The matrix Q is sorted during the transposition
-      SparseMatrix<Scalar, RowMajor, Index> mQrm(this->m_Q);
-      this->m_Q = mQrm;
-      this->m_isQSorted = true;
+      SparseMatrix<Scalar, RowMajor, Index> mHrm(this->m_H);
+      this->m_H = mHrm;
+      this->m_isHSorted = true;
     }
 
     
@@ -297,7 +297,7 @@ class SparseQR_Ext : public SparseSolverBase<SparseQR_Ext<_MatrixType,_OrderingT
     std::string m_lastError;
     MatrixQStorageType m_pmat;            // Temporary matrix
     MatrixRType m_R;               // The triangular factor matrix
-    MatrixQStorageType m_Q;               // The orthogonal reflectors
+    MatrixQStorageType m_H;         // The matrix of Householder vectors (orthogonal reflectors)
     ScalarVector m_hcoeffs;         // The Householder coefficients
     PermutationType m_perm_c;       // Fill-reducing  Column  permutation
     PermutationType m_pivotperm;    // The permutation for rank revealing
@@ -307,7 +307,7 @@ class SparseQR_Ext : public SparseSolverBase<SparseQR_Ext<_MatrixType,_OrderingT
     Index m_nonzeropivots;          // Number of non zero pivots found
     IndexVector m_etree;            // Column elimination tree
     IndexVector m_firstRowElt;      // First element in each row
-    bool m_isQSorted;               // whether Q is sorted or not
+    bool m_isHSorted;               // whether Q is sorted or not
     bool m_isEtreeOk;               // whether the elimination tree match the initial input matrix
     
     template <typename, typename > friend struct SparseQR_Ext_QProduct;
@@ -351,11 +351,11 @@ void SparseQR_Ext<MatrixType,OrderingType>::analyzePattern(const MatrixType& mat
   m_isEtreeOk = true;
   
   m_R.resize(m, n);
-  m_Q.resize(m, diagSize);
+  m_H.resize(m, diagSize);
   
   // Allocate space for nonzero elements : rough estimation
   m_R.reserve(2*mat.nonZeros()); //FIXME Get a more accurate estimation through symbolic factorization with the etree
-  m_Q.reserve(2*mat.nonZeros());
+  m_H.reserve(2*mat.nonZeros());
   m_hcoeffs.resize(diagSize);
   m_analysisIsok = true;
 }
@@ -383,7 +383,7 @@ void SparseQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
   RealScalar pivotThreshold = m_threshold;
 
   m_R.setZero();
-  m_Q.setZero();
+  m_H.setZero();
   m_pmat = mat;
   if(!m_isEtreeOk)
   {
@@ -434,7 +434,7 @@ void SparseQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
   m_pivotperm.setIdentity(n);
   
   StorageIndex nonzeroCol = 0; // Record the number of valid pivots
-  m_Q.startVec(0);
+  m_H.startVec(0);
 
   // Left looking rank-revealing QR factorization: compute a column of R and Q at a time
   for (StorageIndex col = 0; col < n; ++col)
@@ -501,19 +501,19 @@ void SparseQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
       Scalar tdot(0);
 
       // First compute q' * tval
-      tdot = m_Q.col(curIdx).dot(tval);
+      tdot = m_H.col(curIdx).dot(tval);
 
 	  tdot *= m_hcoeffs(curIdx);
 	  
       // Then update tval = tval - q * tau
-      // FIXME: tval -= tdot * m_Q.col(curIdx) should amount to the same (need to check/add support for efficient "dense ?= sparse")
-      for (typename MatrixQStorageType::InnerIterator itq(m_Q, curIdx); itq; ++itq)
+      // FIXME: tval -= tdot * m_H.col(curIdx) should amount to the same (need to check/add support for efficient "dense ?= sparse")
+      for (typename MatrixQStorageType::InnerIterator itq(m_H, curIdx); itq; ++itq)
         tval(itq.row()) -= itq.value() * tdot;
 
       // Detect fill-in for the current column of Q
       if(m_etree(Ridx(i)) == nonzeroCol)
       {
-        for (typename MatrixQStorageType::InnerIterator itq(m_Q, curIdx); itq; ++itq)
+        for (typename MatrixQStorageType::InnerIterator itq(m_H, curIdx); itq; ++itq)
         {
           StorageIndex iQ = StorageIndex(itq.row());
           if (mark(iQ) != col)
@@ -577,12 +577,12 @@ void SparseQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
       for (Index itq = 0; itq < nzcolQ; ++itq)
       {
         Index iQ = Qidx(itq);
-        m_Q.insertBackByOuterInnerUnordered(nonzeroCol,iQ) = tval(iQ);
+        m_H.insertBackByOuterInnerUnordered(nonzeroCol,iQ) = tval(iQ);
         tval(iQ) = Scalar(0.);
       }
       nonzeroCol++;
       if(nonzeroCol<diagSize)
-        m_Q.startVec(nonzeroCol);
+        m_H.startVec(nonzeroCol);
     }
     else
     {
@@ -599,13 +599,13 @@ void SparseQR_Ext<MatrixType,OrderingType>::factorize(const MatrixType& mat)
   m_hcoeffs.tail(diagSize-nonzeroCol).setZero();
   
   // Finalize the column pointers of the sparse matrices R and Q
-  m_Q.finalize();
-  m_Q.makeCompressed();
-  m_Q.prune(Scalar(0));	// Prune the matrix to avoid numerical issues (impacts performance in sparse cases)
+  m_H.finalize();
+  m_H.makeCompressed();
+  m_H.prune(Scalar(0));	// Prune the matrix to avoid numerical issues (impacts performance in sparse cases)
   m_R.finalize();
   m_R.makeCompressed();
   m_R.prune(Scalar(0)); // Prune the matrix to avoid numerical issues (impacts performance in sparse cases)
-  m_isQSorted = false;
+  m_isHSorted = false;
 
   m_nonzeropivots = nonzeroCol;
   
@@ -656,18 +656,18 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
 	Scalar tau = Scalar(0);
     if (m_transpose)
     {
-      eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+      eigen_assert(m_qr.m_H.rows() == m_other.rows() && "Non conforming object sizes");
       //Compute res = Q' * other column by column
 	  for (Index j = 0; j < res.cols(); j++) {
 		// Use temporary vector resColJ inside of the for loop - faster access
 		resColJ = res.col(j).pruned(Scalar(0));
 		for (Index k = 0; k < diagSize; k++) {
 			// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
-			tau = m_qr.m_Q.col(k).dot(resColJ);
+			tau = m_qr.m_H.col(k).dot(resColJ);
 			if (tau == Zero) 
 				continue;
 			tau = tau * m_qr.m_hcoeffs(k);
-			resColJ -= tau *  m_qr.m_Q.col(k);
+			resColJ -= tau *  m_qr.m_H.col(k);
 		}
 		// Write the result back to j-th column of res
 		//res.col(j) = resColJ;
@@ -678,17 +678,17 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
     }
     else
     {
-      eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+      eigen_assert(m_qr.m_H.rows() == m_other.rows() && "Non conforming object sizes");
       // Compute res = Q * other column by column
 	  for (Index j = 0; j < res.cols(); j++) {
 		// Use temporary vector resColJ inside of the for loop - faster access
 		resColJ = res.col(j).pruned(Scalar(0));
 		for (Index k = diagSize - 1; k >= 0; k--) {
-			tau = m_qr.m_Q.col(k).dot(resColJ);
+			tau = m_qr.m_H.col(k).dot(resColJ);
 			if (tau == Zero) 
 				continue;
 			tau = tau * m_qr.m_hcoeffs(k);
-			resColJ -= tau *  m_qr.m_Q.col(k);
+			resColJ -= tau *  m_qr.m_H.col(k);
 		}
 		// Write the result back to j-th column of res
 		//res.col(j) = resColJ;
