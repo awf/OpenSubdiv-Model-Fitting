@@ -385,7 +385,6 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 	Index rowIncrement = m_blockRows - m_blockCols;
 	Index numBlocks = mat.cols() / blockCols;
 	DenseMatrixType Ji = mat.block(0, 0, blockRows, blockCols * 2);
-	DenseMatrixType Ji2;
 	DenseMatrixType tmp;
 
 	// Number of maximum non-zero rows we want to keep, the implicit zeros will be filled in accordingly
