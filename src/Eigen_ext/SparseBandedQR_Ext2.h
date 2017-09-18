@@ -127,6 +127,7 @@ namespace Eigen {
 		}
 		void analyzePattern(const MatrixType& mat);
 		void factorize(const MatrixType& mat);
+		static void householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, MatrixXd &V);
 
 		/** \returns the number of rows of the represented matrix.
 		  */
@@ -349,7 +350,8 @@ namespace Eigen {
  * The operation is happening in-place => result is stored in V.
  * !!! This implementation is efficient only because the input matrices are assumed to be dense, thin and with reasonable amount of rows. !!!
  */
-void householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, MatrixXd &V) {
+template <typename MatrixType, typename OrderingType>
+void SparseBandedQR_Ext2<MatrixType, OrderingType>::householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, MatrixXd &V) {
 	for (int j = 0; j < V.cols(); j++) {
 		for (int k = 0; k < H.cols(); k++) {
 			V.col(j) -= (H.col(k).dot(V.col(j)) * hCoeffs(k)) * H.col(k);
@@ -380,13 +382,13 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 	Eigen::HouseholderQR<DenseMatrixType> houseqr;
 	Index blockRows = m_blockRows;
 	Index blockCols = m_blockCols;
+	Index rowIncrement = m_blockRows - m_blockCols;
 	Index numBlocks = mat.cols() / blockCols;
 	DenseMatrixType Ji = mat.block(0, 0, blockRows, blockCols * 2);
 	DenseMatrixType Ji2;
 	DenseMatrixType tmp;
 
 	// Number of maximum non-zero rows we want to keep, the implicit zeros will be filled in accordingly
-	// This amount yields error norm in range of 1e-14
 	//#define NNZ_ROWS (m_blockRows * 12)
 	//#define NNZ_ROWS (m_blockRows * 16)	
 	//#define NNZ_ROWS (m_blockRows * 24)	
@@ -402,8 +404,6 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 		// Solve dense block using Householder QR
 		houseqr.compute(Ji);
 
-		//std::cout << houseqr.matrixQR() << std::endl;
-
 		// If it is the last block, it's just two columns
 		int currBlockCols = (i == numBlocks - 1) ? blockCols : blockCols * 2;
 
@@ -415,7 +415,6 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 
 			m_hcoeffs(bsh + bc) = houseqr.hCoeffs()(bc);
 		}
-		//H.unaryExpr([](double x) { return (std::abs(x) < 1e-8) ? 0 : x; });
 		for (int bc = 0; bc < currBlockCols; bc++) {
 			Qvals.add_if_nonzero(bs + bc, bsh + bc, H(bc, bc));
 			for (int r = bc + 1; r < activeRows; r++) {
@@ -430,7 +429,6 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 
 		tmp = V;
 
-		//tmp.unaryExpr([](double x) { return (std::abs(x) < 1e-8) ? 0 : x; });
 		for (int br = 0; br < blockCols; br++) {
 			for (int bc = 0; bc < currBlockCols; bc++) {
 				Rvals.add_if_nonzero(bs + br, bs + bc, tmp(br, bc));
@@ -439,7 +437,7 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 
 		if (i < numBlocks - 1) {
 			// Update block rows
-			blockRows += blockCols;
+			blockRows += rowIncrement;
 
 			// How many rows to zero-out implicitly in this step
 			if (blockRows > NNZ_ROWS) {
@@ -449,14 +447,10 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 				// Update Ji accordingly
 				if (i < numBlocks - 2) {
 					Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols * 2).toDense();
-				//	std::cout << Ji << "\n-- Ji --\n";
-
-//					std::cout << tmp << "\n-- tmp --\n";
-					Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, activeRows - blockCols * 2, blockCols);
-	//				std::cout << Ji << "\n-- Jia --\n";
+					Ji.block(0, 0, activeRows - rowIncrement - blockCols, blockCols) = tmp.block(blockCols, blockCols, activeRows - rowIncrement - blockCols, blockCols);
 				} else {
 					Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols).toDense();
-					Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, activeRows - blockCols * 2, blockCols);
+					Ji.block(0, 0, activeRows - rowIncrement - blockCols, blockCols) = tmp.block(blockCols, blockCols, activeRows - rowIncrement - blockCols, blockCols);
 				}
 			} else {
 				numZeros = 0;
@@ -464,7 +458,7 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
 
 				// Update Ji accordingly
 				Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols * 2).toDense();
-				Ji.block(0, 0, activeRows - blockCols * 2, blockCols) = tmp.block(blockCols, blockCols, activeRows - blockCols * 2, blockCols);
+				Ji.block(0, 0, activeRows - rowIncrement - blockCols, blockCols) = tmp.block(blockCols, blockCols, activeRows - rowIncrement - blockCols, blockCols);
 			}
 		}
 	}

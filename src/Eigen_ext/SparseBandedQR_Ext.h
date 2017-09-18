@@ -127,6 +127,7 @@ namespace Eigen {
 		}
 		void analyzePattern(const MatrixType& mat);
 		void factorize(const MatrixType& mat);
+		static void householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, MatrixXd &V);
 
 		/** \returns the number of rows of the represented matrix.
 		  */
@@ -349,7 +350,8 @@ namespace Eigen {
  * The operation is happening in-place => result is stored in V.
  * !!! This implementation is efficient only because the input matrices are assumed to be dense, thin and with reasonable amount of rows. !!!
  */
-void householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, MatrixXd &V) {
+template <typename MatrixType, typename OrderingType>
+void SparseBandedQR_Ext<MatrixType, OrderingType>::householder_product_transposed(const MatrixXd &H, const VectorXd &hCoeffs, MatrixXd &V) {
 	for (int j = 0; j < V.cols(); j++) {
 		for (int k = 0; k < H.cols(); k++) {
 			V.col(j) -= (H.col(k).dot(V.col(j)) * hCoeffs(k)) * H.col(k);
