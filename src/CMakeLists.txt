@@ -53,7 +53,7 @@ ENDIF()
 #---------------------------------------------------------------		
 # Main
 ADD_EXECUTABLE(Fit-Subdiv-to-3D-Points
-	fit-subdiv-to-3d-points.cpp
+	fit_subdiv_to_3d_points.cpp
     MeshTopology.cpp
     log3d.cpp
 	SubdivEvaluator.cpp
@@ -86,9 +86,49 @@ ADD_EXECUTABLE(Fit-Subdiv-to-3D-Points
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
 	Eigen_ext/SparseQR_Ext.h
 	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
 	)
 	
 TARGET_LINK_LIBRARIES(Fit-Subdiv-to-3D-Points ${OSD_LIB} ${SSP_LIB})
+
+ADD_EXECUTABLE(Fit-Subdiv-Jacobian-Test
+	fit_subdiv_jacobian_test.cpp
+    MeshTopology.cpp
+    log3d.cpp
+	SubdivEvaluator.cpp
+	RigidTransform.cpp
+	PLYParser.cpp
+	Logger.cpp
+	FPJParser.cpp
+	BezierPatch.cpp
+	Optimization/BaseFunctor.cpp
+	Optimization/PosOnlyFunctor.cpp
+	Optimization/PosOnlyWithRegFunctor.cpp
+	Optimization/PosAndNormalsFunctor.cpp
+	Optimization/PosAndNormalsWithRegFunctor.cpp
+    MeshTopology.h
+    log3d.h
+	SubdivEvaluator.h
+	RigidTransform.h
+	PLYParser.h
+	Logger.h
+	FPJParser.h
+	BezierPatch.h
+	Optimization/BaseFunctor.h
+	Optimization/PosOnlyFunctor.h
+	Optimization/PosOnlyWithRegFunctor.h
+	Optimization/PosAndNormalsFunctor.h
+	Optimization/PosAndNormalsWithRegFunctor.h
+	Eigen_ext/eigen_extras.h
+	Eigen_ext/BlockSparseQR_Ext.h
+	Eigen_ext/SparseSubblockQR_Ext.h
+	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
+	)
+	
+TARGET_LINK_LIBRARIES(Fit-Subdiv-Jacobian-Test ${OSD_LIB} ${SSP_LIB})
 
 # Tests
 ADD_EXECUTABLE(QR_Solver_Test
@@ -137,6 +177,7 @@ ADD_EXECUTABLE(QR_Diagonalization_Test
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
 	Eigen_ext/SparseQR_Ext.h
 	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
 	)
 	
 ADD_EXECUTABLE(QR_Banded_Test
@@ -149,6 +190,7 @@ ADD_EXECUTABLE(QR_Banded_Test
 	Eigen_ext/BlockDiagonalSparseQR_Ext.h
 	Eigen_ext/SparseQR_Ext.h
 	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
 	)
 	
 

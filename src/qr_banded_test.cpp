@@ -50,7 +50,6 @@ int main() {
 
 	clock_t begin;
 
-
 	typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianType;
 	typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
 	typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;

@@ -109,34 +109,6 @@ int main() {
 	Logger::createLogger("runtime_log.log");
 	Logger::instance()->log(Logger::Info, "Computation STARTED!");
 
-	std::cout << "Go\n";
-	// CREATE DATA SAMPLES
-	/*
-	int nDataPoints = 200;
-	Matrix3X data(3, nDataPoints);
-	for (int i = 0; i < nDataPoints; i++) {
-		if (0) {
-			float t = float(i) / float(nDataPoints);
-			data(0, i) = 0.1f + 1.3f*cos(80 * t);
-			data(1, i) = -0.2f + 0.7f*sin(80 * t);
-			data(2, i) = t;
-		}
-		else {
-			Scalar t = rand() / Scalar(RAND_MAX);
-			Scalar s = rand() / Scalar(RAND_MAX);
-
-			auto u = Scalar(2 * EIGEN_PI * t);
-			auto v = Scalar(EIGEN_PI * (s - 0.5));
-			data(0, i) = 0.1f + 1.3f*cos(u)*cos(v);
-			data(1, i) = -0.2f + 0.7f*sin(u)*cos(v);
-			data(2, i) = sin(v);
-		}
-		if (1)
-			log.position(log.CreateSphere(0, 0.02), data(0, i), data(1, i), data(2, i));
-		else
-			log.star(data.col(i));
-	}
-	*/
 	// Load banana model
 	//PLYParser plyParse("sphere_quad.ply");
 	PLYParser plyParse("Z:/OpenSubdiv-Model-Fitting/build/Debug/banana_quad_coarse.ply");
@@ -149,20 +121,7 @@ int main() {
 	log.ArcRotateCamera();
 	log.axes();
 	log.color(1, 0, 0);
-	/*int nDataPoints = int(plyParse.model().vertices.rows());
-	Matrix3X data(3, nDataPoints);
-	for (int i = 0; i < nDataPoints; i++) {
-		data(0, i) = plyParse.model().vertices(i, 0);
-		data(1, i) = plyParse.model().vertices(i, 1);
-		data(2, i) = plyParse.model().vertices(i, 2);
 
-		//logb.position(logb.CreateSphere(0, 0.02), data(0, i), data(1, i), data(2, i));
-		//logb.position(logb.CreateSphere(0, 0.05), data(0, i), data(1, i), 0.0);
-		log.position(log.CreateSphere(0, 0.05), data(0, i), data(1, i), data(2, i));
-	}*/
-
-	//const unsigned int nParamVals = 3;
-	//float t[nParamVals] = { 0.0, 0.5, 1.0 };
 	const unsigned int nParamVals = 10;
 	float t[nParamVals] = { 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9 };
 	int nDataPoints = int(fpjParse.project().images[0].silhouettePoints[0].rows()) * nParamVals;
@@ -198,15 +157,11 @@ int main() {
 		}
 	}
 
-	std::cout << nDataPoints << std::endl;
-
 	// Draw one of the silhouettes
 	log3d logb("banana.html", "fit-subdiv-to-3d-points");
 	logb.ArcRotateCamera();
 	logb.axes();
 	logb.color(1, 0, 0);
-	//std::cout << int(fpjParse.project().images[0].silhouettePoints.rows()) << std::endl;
-	//std::cout << fpjParse.project().images[0].silhouettePoints << std::endl;
 	for (int i = 0; i < int(fpjParse.project().images[0].silhouettePoints[0].rows()); i++) {
 		Eigen::Vector2f pt = BezierPatch::evaluateAt(fpjParse.project().images[0].silhouettePoints[0].row(i),
 			fpjParse.project().images[0].silhouettePoints[1].row(i), 
@@ -260,101 +215,12 @@ int main() {
 
 	// Initialize uvs.
 	initializeUVs(mesh, params, data);
-	//logsubdivmesh(log, mesh, params.control_vertices);
-	
-	/*MeshTopology mesh1;
-	Matrix3X verts1;
-	SubdivEvaluator evaluator(mesh);
-	evaluator.generate_refined_mesh(params.control_vertices, 1, &mesh1, &verts1);
-	params.control_vertices = verts1;
-	initializeUVs(mesh1, params, data);
-	mesh = mesh1;*/
 
 	OptimizationFunctor::DataConstraints constraints;
 	//constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
 	OptimizationFunctor functor(data, mesh, constraints);
 	//OptimizationFunctor functor(data, dataNormals, mesh, constraints);
 	
-
-	// Check Jacobian
-	if (0) {
-		std::cout << "Test Jacobian MODE" << std::endl;
-		for (float eps = 1e-8f; eps < 1.1e-3f; eps *= 10.f) {
-			NumericalDiff<OptimizationFunctor> fd{ functor, OptimizationFunctor::Scalar(eps) };
-			OptimizationFunctor::JacobianType J;
-			OptimizationFunctor::JacobianType J_fd;
-			functor.df(params, J);
-			fd.df(params, J_fd);
-			double diff = (J - J_fd).norm();
-			unsigned int num_uv = nDataPoints * 2;
-			unsigned int num_tsr = 9;
-			unsigned int num_xyz = mesh.num_vertices * 3;
-			unsigned int num_res_p = nDataPoints * 3;
-			unsigned int num_res_n = nDataPoints;// nDataPoints * 3;
-			unsigned int num_res_c = constraints.size() * 3;
-			unsigned int num_res_tp = num_xyz;
-			if (diff > 0) {
-				std::cout << "pn-xyz: " << (J.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz) - J_fd.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_n, num_xyz)).norm() << std::endl;
-				std::cout << "pn-uv: " << (J.toDense().block(0, 0, num_res_p + num_res_n, num_uv) - J_fd.toDense().block(0, 0, num_res_p + num_res_n, num_uv)).norm() << std::endl;
-				std::cout << "pn-t: " << (J.toDense().block(0, num_uv, num_res_p + num_res_n, 3) - J_fd.toDense().block(0, num_uv, num_res_p + num_res_n, 3)).norm() << std::endl;
-				std::cout << "pn-s: " << (J.toDense().block(0, num_uv + 3, num_res_p + num_res_n, 3) - J_fd.toDense().block(0, num_uv + 3, num_res_p + num_res_n, 3)).norm() << std::endl;
-				std::cout << "pn-r: " << (J.toDense().block(0, num_uv + 6, num_res_p + num_res_n, 3) - J_fd.toDense().block(0, num_uv + 6, num_res_p + num_res_n, 3)).norm() << std::endl;
-				std::cout << "pn-tsr: " << (J.toDense().block(0, num_uv, num_res_p + num_res_n, num_tsr) - J_fd.toDense().block(0, num_uv, num_res_p + num_res_n, num_tsr)).norm() << std::endl;
-				std::cout << "c-xyz: " << (J.toDense().block(num_res_p + num_res_n, num_uv + num_tsr, num_res_c, num_xyz) - J_fd.toDense().block(num_res_p + num_res_n, num_uv + num_tsr, num_res_c, num_xyz)).norm() << std::endl;
-				std::cout << "c-uv: " << (J.toDense().block(num_res_p + num_res_n, 0, num_res_c, num_uv) - J_fd.toDense().block(num_res_p + num_res_n, 0, num_res_c, num_uv)).norm() << std::endl;
-				std::cout << "c-tsr: " << (J.toDense().block(num_res_p + num_res_n, num_uv, num_res_c, num_tsr) - J_fd.toDense().block(num_res_p + num_res_n, num_uv, num_res_c, num_tsr)).norm() << std::endl;
-				std::cout << "tp-xyz: " << (J.toDense().block(num_res_p + num_res_n + num_res_c, num_uv + num_tsr, num_res_tp, num_xyz) - J_fd.toDense().block(num_res_p + num_res_n + num_res_c, num_uv + num_tsr, num_res_tp, num_xyz)).norm() << std::endl;
-				std::cout << "tp-uv: " << (J.toDense().block(num_res_p + num_res_n + num_res_c, 0, num_res_tp, num_uv) - J_fd.toDense().block(num_res_p + num_res_n + num_res_c, 0, num_res_tp, num_uv)).norm() << std::endl;
-				std::cout << "tp-tsr: " << (J.toDense().block(num_res_p + num_res_n + num_res_c, num_uv, num_res_tp, num_tsr) - J_fd.toDense().block(num_res_p + num_res_n + num_res_c, num_uv, num_res_tp, num_tsr)).norm() << std::endl;
-				
-				/*
-				std::ofstream ofs("j_xyz_fd.csv");
-				ofs << J_fd.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_c + num_res_tp, num_xyz) << std::endl;
-				ofs.close();
-
-				std::ofstream ofs2("j_xyz_my.csv");
-				ofs2 << J.toDense().block(0, num_uv + num_tsr, num_res_p + num_res_c + num_res_tp, num_xyz) << std::endl;
-				ofs2.close();
-				*/
-
-				Logger::instance()->logMatrixCSV(J_fd.toDense().block(0, 0, num_res_p + num_res_n, num_uv), "j_pnuv_fd.csv");
-				Logger::instance()->logMatrixCSV(J.toDense().block(0, 0, num_res_p + num_res_n, num_uv), "j_pnuv_my.csv");
-				//Logger::instance()->logMatrixCSV(J_fd.toDense().block(num_res_p + num_res_c, num_uv, num_res_tp, num_tsr + num_xyz), "j_tp_fd.csv");
-				//Logger::instance()->logMatrixCSV(J.toDense().block(num_res_p + num_res_c, num_uv, num_res_tp, num_tsr + num_xyz), "j_tp_my.csv");
-				
-				/*
-				std::ofstream ofs("p_st_fd.csv");
-				ofs << J_fd.toDense().block<560, 9>(0, 374) << std::endl;
-				ofs.close();
-
-				std::ofstream ofs2("p_st_my.csv");
-				ofs2 << J.toDense().block<560, 9>(0, 374)<< std::endl;
-				ofs2.close();
-				*/
-				/*std::ofstream ofs("tp-xyz_fd.csv");
-				ofs << J_fd.toDense().block<24, 24>(153, 102) << std::endl;
-				ofs.close();
-
-				std::ofstream ofs2("tp-xyz_my.csv");
-				ofs2 << J.toDense().block<24, 24>(153, 102) << std::endl;
-				ofs2.close();*/
-
-				std::stringstream ss;
-				ss << "Jacobian diff(eps=" << eps << "), = " << diff;
-				Logger::instance()->log(Logger::Debug, ss.str());
-				Logger::instance()->logSparseMatrix(J, "J.txt");
-				Logger::instance()->logSparseMatrix(J_fd, "J_fd.txt");
-			}
-
-			if (diff > 10.0) {
-				std::cout << "Test Jacobian - ERROR TOO BIG, exitting..." << std::endl;
-				return 0;
-			}
-		}
-		std::cout << "Test Jacobian - DONE, exitting..." << std::endl;
-		return 0;
-	}
-
 	// Set-up the optimization
 	Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor);
 	lm.setVerbose(true);
@@ -422,6 +288,8 @@ int main() {
 	}
 	
 	Logger::instance()->log(Logger::Info, "Computation DONE!");
+
+	return 0;
 }
 
 // Override system assert so one can set a breakpoint in it rather than clicking "Retry" and "Break"
