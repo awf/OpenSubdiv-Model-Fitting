@@ -9,7 +9,8 @@
 #include "../Eigen_ext/BlockSparseQR_Ext.h"
 #include "../Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "../Eigen_ext/SparseSubblockQR_Ext.h"
-#include "../Eigen_ext/SparseBandedQR_Ext.h"
+//#include "../Eigen_ext/SparseBandedQR_Ext.h"
+#include "../Eigen_ext/SparseBandedQR_Ext2.h"
 
 #include <Eigen/SparseCore>
 #include <Eigen/src/Core/util/DisableStupidWarnings.h>
@@ -270,7 +271,8 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 	//typedef SPQR<JacobianType> SparseSuperblockSolver;
 	//typedef BlockDiagonalSparseQR_Ext<JacobianType, DenseQRSolverSmallBlock> DiagonalSubblockSolver;
 	//typedef SparseSubblockQR_Ext<JacobianType, DiagonalSubblockSolver, SparseSuperblockSolver> LeftSuperBlockSolver;
-	typedef SparseBandedQR_Ext<JacobianType, NaturalOrdering<SparseDataType> > LeftSuperBlockSolver;
+	//typedef SparseBandedQR_Ext<JacobianType, NaturalOrdering<SparseDataType> > LeftSuperBlockSolver;
+	typedef SparseBandedQR_Ext2<JacobianType, NaturalOrdering<SparseDataType> > LeftSuperBlockSolver;
 	//typedef SPQR<JacobianType> LeftSuperBlockSolver;
 
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)

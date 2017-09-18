@@ -4,8 +4,9 @@
 
 PosAndNormalsWithRegFunctor::PosAndNormalsWithRegFunctor(const Matrix3X& data_points, const Matrix3X &data_normals, const MeshTopology& mesh, const DataConstraints& constraints)
 	: BaseFunctor(mesh.num_vertices * 3 + data_points.cols() * 2 + 9,   /* number of parameters */
-		data_points.cols() * 3 + constraints.size() * 3 + data_normals.cols() * 3 + mesh.num_vertices * 3, /* number of residuals */
-		data_points.cols() * 3 + data_points.cols() * 6 + data_points.cols() * 6 + data_points.cols() * 9 + constraints.size() * 3 + constraints.size() * 15 + mesh.num_vertices * 3 + data_points.cols() * 15,	/* number of Jacobian nonzeros */
+		data_points.cols() * 3 + constraints.size() * 3 + data_normals.cols() * 3 + mesh.num_vertices * 3 + data_points.cols(), /* number of residuals */
+		data_points.cols() * 3 + data_points.cols() * 6 + data_points.cols() * 6 + data_points.cols() * 9 + constraints.size() * 3 
+			+ constraints.size() * 15 + mesh.num_vertices * 3 + data_points.cols() * 15 + data_points.cols() * 4,	/* number of Jacobian nonzeros */
 		data_points,
 		mesh,
 		constraints),
@@ -22,8 +23,9 @@ PosAndNormalsWithRegFunctor::PosAndNormalsWithRegFunctor(const Matrix3X& data_po
 void PosAndNormalsWithRegFunctor::f_impl(const InputType& x, ValueType& fvec) {
 	this->E_pos(x, data_points, fvec, 0, 0);
 	this->E_normal(x, data_normals, fvec, 0, 3);
-	this->E_constraints(x, data_points, data_constraints, fvec, this->nDataPoints() * 3 + data_normals.cols() * 3);
-	this->E_thinplate(x, fvec, data_points.cols() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
+	this->E_continuity(x, fvec, 0, 6);
+	this->E_constraints(x, data_points, data_constraints, fvec, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataPoints());
+	this->E_thinplate(x, fvec, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataPoints() + this->nDataConstraints() * 3);
 }
 
 // 2. Evaluate jacobian at x
@@ -37,18 +39,19 @@ void PosAndNormalsWithRegFunctor::df_impl(const InputType& x, Eigen::TripletArra
 	// 1. Derivatives wrt control vertices.
 	this->dE_pos_d_X(x, jvals, X_base, 0, 0);
 	this->dE_normal_d_X(x, jvals, X_base, 0, 3);
-	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
-	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
+	this->dE_constraints_d_X(x, data_constraints, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataPoints());
+	this->dE_thinplate_d_X(x, jvals, X_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataPoints() + this->nDataConstraints() * 3);
 
 	// 2. Derivatives wrt correspondences
 	this->dE_pos_d_uv(x, jvals, ubase, 0, 0);
 	this->dE_normal_d_uv(x, jvals, ubase, 0, 3);
+	this->dE_continuity_d_uv(x, jvals, ubase, 0, 6);
 
 	// 3. Derivatives wrt transformation parameters
 	this->dE_pos_d_rst(x, jvals, rst_base, 0, 0);
 	this->dE_normal_d_rst(x, jvals, rst_base, 0, 3);
-	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3);
-	this->dE_thinplate_d_rst(x, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataConstraints() * 3);
+	this->dE_constraints_d_rst(x, data_constraints, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataPoints());
+	this->dE_thinplate_d_rst(x, jvals, rst_base, this->nDataPoints() * 3 + data_normals.cols() * 3 + this->nDataPoints() + this->nDataConstraints() * 3);
 }
 
 void PosAndNormalsWithRegFunctor::increment_in_place_impl(InputType* x, StepType const& p) {

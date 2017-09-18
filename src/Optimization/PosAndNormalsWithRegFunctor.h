@@ -3,7 +3,7 @@
 
 #include "BaseFunctor.h"
 
-struct PosAndNormalsWithRegFunctor : public BaseFunctor<6, 2> {
+struct PosAndNormalsWithRegFunctor : public BaseFunctor<7, 2> {
 	// Input normals
 	Matrix3X data_normals;
 
