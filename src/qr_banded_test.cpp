@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <ctime>
 
+#include <future>
+
 #include <random>
 
 #include <Eigen/Eigen>
@@ -42,11 +44,12 @@ int main() {
 	std::default_random_engine gen;
 	std::uniform_real_distribution<double> dist(0.0, 1.0);
 
-	Eigen::Index numVars = 1024;
+	Eigen::Index numVars = 1024 * 10;
 	Eigen::Index numParams = numVars * 2;
 	Eigen::Index numResiduals = numVars * 3 + numVars + numVars * 3;
 
 	clock_t begin;
+
 
 	typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianType;
 	typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
@@ -118,9 +121,9 @@ int main() {
 	std::cout << "Solver: Banded QR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	BandedQRSolver slvr;
-	//slvr.setRoundoffEpsilon(1e-16);
+	slvr.setRoundoffEpsilon(1e-16);
 	//slvr.setRoundoffEpsilon(1e-12);
-	slvr.setRoundoffEpsilon(1e-10);
+	//slvr.setRoundoffEpsilon(1e-10);
 	//slvr.setBlockParams(4, 2);
 	slvr.setBlockParams(7, 2);
 	begin = clock();

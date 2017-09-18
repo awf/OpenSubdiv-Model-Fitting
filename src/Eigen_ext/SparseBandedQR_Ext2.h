@@ -476,6 +476,8 @@ void SparseBandedQR_Ext2<MatrixType, OrderingType>::factorize(const MatrixType& 
   m_info = Success;
 }
 
+#define MULTITHREADED 1
+
 // xxawf boilerplate all this into BlockSparseBandedQR_Ext2...
 template <typename SparseBandedQR_Ext2Type, typename Derived>
 struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct<SparseBandedQR_Ext2Type, Derived> >
@@ -513,6 +515,50 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
     if (m_transpose)
     {
 		eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+
+#ifdef MULTITHREADED
+		// Compute res = Q' * other column by column using parallel for loop
+		const size_t nloop = res.cols();
+		const size_t nthreads = std::thread::hardware_concurrency();
+		{
+			std::vector<std::thread> threads(nthreads);
+			std::mutex critical;
+			for (int t = 0; t<nthreads; t++)
+			{
+				threads[t] = std::thread(std::bind(
+					[&](const int bi, const int ei, const int t)
+				{
+					// loop over all items
+					for (int j = bi; j<ei; j++)
+					{
+						// inner loop
+						{
+							SparseVector resColJ;
+							resColJ = res.col(j);
+							for (Index k = 0; k < diagSize; k++) {
+								// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
+								tau = m_qr.m_Q.col(k).dot(resColJ);
+								//if(tau == Zero)
+								if (IS_ZERO(tau, m_qr.m_eps)) {
+									continue;
+								}
+								tau = tau * m_qr.m_hcoeffs(k);
+								resColJ -= tau *  m_qr.m_Q.col(k);
+							}
+
+							std::lock_guard<std::mutex> lock(critical);
+							// Write the result back to j-th column of res
+							for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+								resVals.add(it.row(), j, it.value());
+							}
+
+						}
+					}
+				}, t*nloop / nthreads, (t + 1) == nthreads ? nloop : (t + 1)*nloop / nthreads, t));
+			}
+			std::for_each(threads.begin(), threads.end(), [](std::thread& x) {x.join(); });
+		}
+#else
 		//Compute res = Q' * other column by column
 		for (Index j = 0; j < res.cols(); j++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
@@ -521,8 +567,9 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 				// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
 				tau = m_qr.m_Q.col(k).dot(resColJ);
 				//if(tau == Zero)
-				if (IS_ZERO(tau, m_qr.m_eps))
+				if (IS_ZERO(tau, m_qr.m_eps)) {
 					continue;
+				}
 				tau = tau * m_qr.m_hcoeffs(k);
 				resColJ -= tau *  m_qr.m_Q.col(k);
 			}
@@ -531,10 +578,54 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 				resVals.add(it.row(), j, it.value());
 			}
 		}
+#endif
     }
     else
     {
 		eigen_assert(m_qr.m_Q.rows() == m_other.rows() && "Non conforming object sizes");
+
+		// Compute res = Q * other column by column using parallel for loop
+#ifdef MULTITHREADED
+		const size_t nloop = res.cols();
+		const size_t nthreads = std::thread::hardware_concurrency();
+		{
+			std::vector<std::thread> threads(nthreads);
+			std::mutex critical;
+			for (int t = 0; t<nthreads; t++)
+			{
+				threads[t] = std::thread(std::bind(
+					[&](const int bi, const int ei, const int t)
+				{
+					// loop over all items
+					for (int j = bi; j<ei; j++)
+					{
+						// inner loop
+						{
+							SparseVector resColJ;
+							resColJ = res.col(j);
+							for (Index k = diagSize - 1; k >= 0; k--) {
+								tau = m_qr.m_Q.col(k).dot(resColJ);
+								//if (tau == Zero)
+								if (IS_ZERO(tau, m_qr.m_eps)) {
+									continue;
+								}
+								tau = tau * m_qr.m_hcoeffs(k);
+								resColJ -= tau *  m_qr.m_Q.col(k);
+							}
+
+							std::lock_guard<std::mutex> lock(critical);
+							// Write the result back to j-th column of res
+							for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+								resVals.add(it.row(), j, it.value());
+							}
+
+						}
+					}
+				}, t*nloop / nthreads, (t + 1) == nthreads ? nloop : (t + 1)*nloop / nthreads, t));
+			}
+			std::for_each(threads.begin(), threads.end(), [](std::thread& x) {x.join(); });
+		}
+#else
 		// Compute res = Q * other column by column
 		for (Index j = 0; j < res.cols(); j++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
@@ -542,8 +633,9 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 			for (Index k = diagSize - 1; k >= 0; k--) {
 				tau = m_qr.m_Q.col(k).dot(resColJ);
 				//if (tau == Zero)
-				if (IS_ZERO(tau, m_qr.m_eps))
+				if (IS_ZERO(tau, m_qr.m_eps)) {
 					continue;
+				}
 				tau = tau * m_qr.m_hcoeffs(k);
 				resColJ -= tau *  m_qr.m_Q.col(k);
 			}
@@ -552,6 +644,7 @@ struct SparseBandedQR_Ext2_QProduct : ReturnByValue<SparseBandedQR_Ext2_QProduct
 				resVals.add(it.row(), j, it.value());
 			}
 		}
+#endif
     }
 
 	res.setFromTriplets(resVals.begin(), resVals.end());
