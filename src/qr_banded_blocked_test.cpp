@@ -23,7 +23,7 @@
 #include "Eigen_ext/BlockSparseQR_Ext.h"
 #include "Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "Eigen_ext/SparseSubblockQR_Ext.h"
-#include "Eigen_ext/SparseBandedQR_Ext2.h"
+#include "Eigen_ext/SparseBandedBlockedQR_Ext.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -44,7 +44,7 @@ int main() {
 	std::default_random_engine gen;
 	std::uniform_real_distribution<double> dist(0.0, 1.0);
 
-	Eigen::Index numVars = 1024;
+	Eigen::Index numVars = 16;
 	Eigen::Index numParams = numVars * 2;
 	Eigen::Index numResiduals = numVars * 3 + numVars + numVars * 3;
 
@@ -55,7 +55,7 @@ int main() {
 	typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
 	//typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
 	typedef SparseQR_Ext<JacobianType, NaturalOrdering<int> > GeneralQRSolver;
-	typedef SparseBandedQR_Ext2<JacobianType, NaturalOrdering<int> > BandedQRSolver;
+	typedef SparseBandedBlockedQR_Ext<JacobianType, NaturalOrdering<int> > BandedQRSolver;
 	typedef SPQR<JacobianType> SPQRSolver;
 
 	/*
@@ -95,6 +95,7 @@ int main() {
 	/*
 	 * Solve the problem using SuiteSparse QR.
 	*/
+	/*
 	std::cout << "Solver: SPQR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	SPQRSolver spqr;
@@ -113,7 +114,7 @@ int main() {
 	std::cout << "||Qt * J - R||_2 = " << (QSP.transpose() * spJ - spqr.matrixR()).norm() << std::endl;
 	//std::cout << "||Qt * Q - I||_2 = " << (QSP.transpose() * QSP - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
-
+	*/
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
@@ -150,6 +151,10 @@ int main() {
 	std::cout << "||Qt * J - R||_2 = " << (slvrQ.transpose() * spJ - slvr.matrixR()).norm() << std::endl;
 	//std::cout << "||Qt * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
+
+
+	Logger::instance()->logMatrixCSV(slvr.matrixY().toDense(), "slvrY.csv");
+	Logger::instance()->logMatrixCSV(slvr.matrixW().toDense(), "slvrW.csv");
 
 #if !defined(_DEBUG) && defined(OUTPUT_MAT)
 	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
