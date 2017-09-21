@@ -498,6 +498,7 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
 }
 
 //#define MULTITHREADED 1
+#define APPROXIMATE 1
 
 // xxawf boilerplate all this into BlockSparseBandedBlockedQR_Ext...
 template <typename SparseBandedBlockedQR_ExtType, typename Derived>
@@ -543,6 +544,8 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 
 #ifdef MULTITHREADED
 		// Compute res = Q' * other column by column using parallel for loop
+		const int blockWidth = m_qr.m_blockCols;
+		tmp = SparseVector(blockWidth);
 		const size_t nloop = res.cols();
 		const size_t nthreads = std::thread::hardware_concurrency();
 		{
@@ -558,17 +561,23 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 					{
 						// inner loop
 						{
+							SparseVector tmp = SparseVector(blockWidth);
 							SparseVector resColJ;
 							resColJ = res.col(j);
-							for (Index k = 0; k < diagSize; k++) {
-								// Need to instantiate this to tmp to avoid various runtime fails (error in insertInnerOuter, mysterious collapses to zero)
-								tau = m_qr.m_H.col(k).dot(resColJ);
-								//if(tau == Zero)
-								if (IS_ZERO(tau, m_qr.m_eps)) {
+							for (Index k = 0; k < diagSize; k += blockWidth) {
+								for (int ii = 0; ii < blockWidth; ii++) {	// This loop gets obviously unrolled by the compiler
+									tmp.coeffRef(ii) = m_qr.m_W.col(k + ii).dot(resColJ);
+								}
+
+#ifdef APPROXIMATE
+								if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
+#else
+								if (tmp.sum() == Scalar(0)) {
+#endif
 									continue;
 								}
-								tau = tau * m_qr.m_hcoeffs(k);
-								resColJ -= tau *  m_qr.m_H.col(k);
+
+								resColJ -= m_qr.m_Y.middleCols(k, blockWidth) * tmp;
 							}
 
 							std::lock_guard<std::mutex> lock(critical);
@@ -595,8 +604,11 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 					tmp.coeffRef(ii) = m_qr.m_W.col(k + ii).dot(resColJ);
 				}
 
-				//if (tmp.sum() == Scalar(0)) {
+#ifdef APPROXIMATE
 				if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
+#else
+				if (tmp.sum() == Scalar(0)) {
+#endif
 					continue;
 				}
 
@@ -615,6 +627,7 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 
 		// Compute res = Q * other column by column using parallel for loop
 #ifdef MULTITHREADED
+		const int blockWidth = m_qr.m_blockCols;
 		const size_t nloop = res.cols();
 		const size_t nthreads = std::thread::hardware_concurrency();
 		{
@@ -630,16 +643,23 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 					{
 						// inner loop
 						{
+							SparseVector tmp = SparseVector(blockWidth);
 							SparseVector resColJ;
 							resColJ = res.col(j);
-							for (Index k = diagSize - 1; k >= 0; k--) {
-								tau = m_qr.m_H.col(k).dot(resColJ);
-								//if (tau == Zero)
-								if (IS_ZERO(tau, m_qr.m_eps)) {
+							for (Index k = diagSize; k > 0; k -= blockWidth) {
+								for (int ii = 0; ii < blockWidth; ii++) {	// This loop gets obviously unrolled by the compiler
+									tmp.coeffRef(ii) = m_qr.m_Y.col(k - blockWidth + ii).dot(resColJ);
+								}
+
+#ifdef APPROXIMATE
+								if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
+#else
+								if (tmp.sum() == Scalar(0)) {
+#endif
 									continue;
 								}
-								tau = tau * m_qr.m_hcoeffs(k);
-								resColJ -= tau *  m_qr.m_H.col(k);
+
+								resColJ -= m_qr.m_W.middleCols(k - blockWidth, blockWidth) * tmp;
 							}
 
 							std::lock_guard<std::mutex> lock(critical);
@@ -666,8 +686,11 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 					tmp.coeffRef(ii) = m_qr.m_Y.col(k - blockWidth + ii).dot(resColJ);
 				}
 
-				//if(tmp.sum() == Scalar(0)) {
+#ifdef APPROXIMATE
 				if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
+#else
+				if (tmp.sum() == Scalar(0)) {
+#endif
 					continue;
 				}
 				

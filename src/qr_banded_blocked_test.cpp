@@ -118,8 +118,8 @@ int main() {
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
-	const Index blockRows = 35;
-	const Index blockCols = 12;
+	const Index blockRows = 105;//35;
+	const Index blockCols = 32;//12;
 	const Index blockOverlap = 2;
 	std::cout << "Solver: Banded Blocked QR (" << blockRows << ", " << blockCols << ", " << blockOverlap << ")" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
