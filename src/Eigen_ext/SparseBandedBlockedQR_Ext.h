@@ -100,16 +100,19 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBandedBlockedQR_Ext() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
+		SparseBandedBlockedQR_Ext() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2), m_blockOverlap(2)
 		{ }
-
+			
+		SparseBandedBlockedQR_Ext(const Index &_blockRows, const Index &_blockCols, const Index &_blockOverlap) 
+			: m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(_blockRows), m_blockCols(_blockCols), m_blockOverlap(_blockOverlap)
+		{ }
 		/** Construct a QR factorization of the matrix \a mat.
 		  *
 		  * \warning The matrix \a mat must be in compressed mode (see SparseMatrix::makeCompressed()).
 		  *
 		  * \sa compute()
 		  */
-		explicit SparseBandedBlockedQR_Ext(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2)
+		explicit SparseBandedBlockedQR_Ext(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2), m_blockOverlap(2)
 		{
 			compute(mat);
 		}
@@ -195,11 +198,6 @@ namespace Eigen {
 
 		void setRoundoffEpsilon(const RealScalar &_eps) {
 			this->m_eps = _eps;
-		}
-
-		void setBlockParams(const Index &_blockRows, const Index &_blockCols) {
-			this->m_blockRows = _blockRows;
-			this->m_blockCols = _blockCols;
 		}
 
 		/** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
@@ -303,8 +301,9 @@ namespace Eigen {
 		bool m_isHSorted;               // whether Q is sorted or not
 		RealScalar m_eps;
 
-		Index m_blockRows;
-		Index m_blockCols;
+		const Index m_blockRows;
+		const Index m_blockCols;
+		const Index m_blockOverlap;
 
 		template <typename, typename > friend struct SparseBandedBlockedQR_Ext_QProduct;
 
@@ -326,9 +325,12 @@ namespace Eigen {
 		Index m = mat.rows();
 		Index diagSize = (std::min)(m, n);
 
-		m_Y.resize(mat.rows(), mat.cols() * 2);
+		Index colIncrement = m_blockCols - m_blockOverlap;
+		Index numBlocks = std::ceil(double(mat.cols()) / colIncrement);// mat.cols() / colIncrement;
+
+		m_Y.resize(mat.rows(), numBlocks * m_blockCols);
 		m_Y.setZero();
-		m_W.resize(mat.rows(), mat.cols() * 2);
+		m_W.resize(mat.rows(), numBlocks * m_blockCols);
 		m_W.setZero();
 		m_R.resize(mat.rows(), mat.cols());
 
@@ -374,34 +376,26 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
 	Eigen::HouseholderQR<DenseMatrixType> houseqr;
 	Index blockRows = m_blockRows;
 	Index blockCols = m_blockCols;
-	Index rowIncrement = m_blockRows - m_blockCols;
-	Index numBlocks = mat.cols() / blockCols;
-	DenseMatrixType Ji = mat.block(0, 0, blockRows, blockCols * 2);
+	Index colIncrement = m_blockCols - m_blockOverlap;
+	Index rowIncrement = m_blockRows - colIncrement;
+	Index numBlocks = std::ceil(double(mat.cols()) / colIncrement);
+	Index lastBlockCols = mat.cols() - (numBlocks - 1) * colIncrement;
+	DenseMatrixType Ji = mat.block(0, 0, blockRows, blockCols);
 	DenseMatrixType tmp;
 
 	// Number of maximum non-zero rows we want to keep, the implicit zeros will be filled in accordingly
-	//#define NNZ_ROWS (m_blockRows * 12)
-	//#define NNZ_ROWS (m_blockRows * 16)	
-	//#define NNZ_ROWS (m_blockRows * 24)	
 	#define NNZ_ROWS (m_blockRows * 2)	
 
 	int numZeros = 0;				// Number of implicitly zero-ed rows
 	int activeRows = blockRows;		// Number of non-zero rows for implicit zero-ing
+	int currBlockCols = blockCols;
 	for (Index i = 0; i < numBlocks; i++) {
 		// Where does the current block start
-		Index bs = i * blockCols;
-		Index bsh = i * (blockCols * 2);
+		Index bs = i * colIncrement;
+		Index bsh = i * blockCols;
 
 		// Solve dense block using Householder QR
-		//std::cout << "--- Ji ---\n" << Ji << std::endl;
-//		if (activeRows > m_blockRows + 1) {
-//			Ji.middleRows(1, activeRows - m_blockRows - 1).setZero();
-		//	std::cout << "--- Jia ---\n" << Ji << std::endl;
-//		}
 		houseqr.compute(Ji);
-
-		// If it is the last block, it's just two columns
-		int currBlockCols = (i == numBlocks - 1) ? blockCols : blockCols * 2;
 
 		// Update matrices W and Y
 		MatrixXd W = MatrixXd::Zero(activeRows, currBlockCols);
@@ -445,7 +439,8 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
 
 		tmp = V;
 
-		for (int br = 0; br < blockCols; br++) {
+		int solvedRows =  (i == numBlocks - 1) ? lastBlockCols : colIncrement;
+		for (int br = 0; br < solvedRows; br++) {
 			for (int bc = 0; bc < currBlockCols; bc++) {
 				Rvals.add_if_nonzero(bs + br, bs + bc, tmp(br, bc));
 			}
@@ -453,7 +448,8 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
 
 		if (i < numBlocks - 1) {
 			// Update block rows
-			blockRows += rowIncrement;
+			int newRows = ((i == numBlocks - 2) ? (mat.rows() - bs - blockRows - colIncrement) : rowIncrement);
+			blockRows += newRows;
 
 			// How many rows to zero-out implicitly in this step
 			if (blockRows > NNZ_ROWS) {
@@ -462,19 +458,25 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
 
 				// Update Ji accordingly
 				if (i < numBlocks - 2) {
-					Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols * 2).toDense();
-					Ji.block(0, 0, activeRows - rowIncrement - blockCols, blockCols) = tmp.block(blockCols, blockCols, activeRows - rowIncrement - blockCols, blockCols);
+					Ji = mat.block(bs + colIncrement + numZeros, bs + colIncrement, activeRows, blockCols).toDense();
+					Ji.block(0, 0, activeRows - newRows - colIncrement, m_blockOverlap) = tmp.block(colIncrement, colIncrement, activeRows - newRows - colIncrement, m_blockOverlap);
 				} else {
-					Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols).toDense();
-					Ji.block(0, 0, activeRows - rowIncrement - blockCols, blockCols) = tmp.block(blockCols, blockCols, activeRows - rowIncrement - blockCols, blockCols);
+					Ji = mat.block(mat.rows() - activeRows, mat.cols() - lastBlockCols, activeRows, lastBlockCols).toDense();
+					Ji.block(0, 0, activeRows - newRows - colIncrement, m_blockOverlap) = tmp.block(colIncrement, colIncrement, activeRows - newRows - colIncrement, m_blockOverlap);
+					currBlockCols = lastBlockCols;
 				}
 			} else {
 				numZeros = 0;
 				activeRows = blockRows;
 
 				// Update Ji accordingly
-				Ji = mat.block(bs + blockCols + numZeros, bs + blockCols, activeRows, blockCols * 2).toDense();
-				Ji.block(0, 0, activeRows - rowIncrement - blockCols, blockCols) = tmp.block(blockCols, blockCols, activeRows - rowIncrement - blockCols, blockCols);
+				Ji = mat.block(bs + colIncrement + numZeros, bs + colIncrement, activeRows, blockCols).toDense();
+
+				//std::cout << "--- Ji ---\n" << mat.block(bs + colIncrement + numZeros, bs + colIncrement, activeRows, blockCols).toDense() << std::endl;
+				//std::cout << "--- tmp ---\n" << tmp << std::endl;
+				//std::cout << "--- tmp block ---\n" << tmp.block(colIncrement, colIncrement, activeRows - rowIncrement - colIncrement, m_blockOverlap) << std::endl;
+
+				Ji.block(0, 0, activeRows - rowIncrement - colIncrement, m_blockOverlap) = tmp.block(colIncrement, colIncrement, activeRows - rowIncrement - colIncrement, m_blockOverlap);
 			}
 		}
 	}
@@ -583,7 +585,7 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 		}
 #else
 		//Compute res = Q' * other column by column
-		const int blockWidth = 4;
+		const int blockWidth = m_qr.m_blockCols;
 		tmp = SparseVector(blockWidth);
 		for (Index j = 0; j < res.cols(); j++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
@@ -654,9 +656,8 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 		}
 #else
 		// Compute res = Q * other column by column
-		const int blockWidth = 4;
-		//tmp = SparseVector(blockWidth);
-		tmp = SparseVector(m_qr.m_W.rows());
+		const int blockWidth = m_qr.m_blockCols;
+		tmp = SparseVector(blockWidth);
 		for (Index j = 0; j < res.cols(); j++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
 			resColJ = res.col(j);

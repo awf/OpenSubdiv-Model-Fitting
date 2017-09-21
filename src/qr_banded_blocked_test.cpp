@@ -44,7 +44,7 @@ int main() {
 	std::default_random_engine gen;
 	std::uniform_real_distribution<double> dist(0.0, 1.0);
 
-	Eigen::Index numVars = 16;
+	Eigen::Index numVars = 1024;
 	Eigen::Index numParams = numVars * 2;
 	Eigen::Index numResiduals = numVars * 3 + numVars + numVars * 3;
 
@@ -53,9 +53,8 @@ int main() {
 	typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianType;
 	typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
 	typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
-	//typedef SparseQR_Ext<JacobianType, COLAMDOrdering<int> > GeneralQRSolver;
 	typedef SparseQR_Ext<JacobianType, NaturalOrdering<int> > GeneralQRSolver;
-	typedef SparseBandedBlockedQR_Ext<JacobianType, NaturalOrdering<int> > BandedQRSolver;
+	typedef SparseBandedBlockedQR_Ext<JacobianType, NaturalOrdering<int> > BandedBlockedQRSolver;
 	typedef SPQR<JacobianType> SPQRSolver;
 
 	/*
@@ -86,7 +85,7 @@ int main() {
 	I.setIdentity();
 
 #if !defined(_DEBUG) && defined(OUTPUT_MAT)
-	Logger::instance()->logMatrixCSV(spJ.toDense(), "spJ.csv");
+	Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ.csv");
 #endif
 
 	std::cout << "Problem size (r x c): " << spJ.rows() << " x " << spJ.cols() << std::endl;
@@ -115,25 +114,34 @@ int main() {
 	//std::cout << "||Qt * Q - I||_2 = " << (QSP.transpose() * QSP - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
 	*/
+
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
-	std::cout << "Solver: Banded QR" << std::endl;
+	const Index blockRows = 35;
+	const Index blockCols = 12;
+	const Index blockOverlap = 2;
+	std::cout << "Solver: Banded Blocked QR (" << blockRows << ", " << blockCols << ", " << blockOverlap << ")" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
-	BandedQRSolver slvr;
+	BandedBlockedQRSolver slvr(blockRows, blockCols, blockOverlap);
 	slvr.setRoundoffEpsilon(1e-16);
-	//slvr.setRoundoffEpsilon(1e-12);
-	//slvr.setRoundoffEpsilon(1e-10);
-	//slvr.setBlockParams(4, 2);
-	slvr.setBlockParams(7, 2);
+
 	begin = clock();
 	slvr.compute(spJ);
-	std::cout << "Factorization: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	std::cout << "Factorization:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	begin = clock();
+	JacobianType slvrQt(spJ.rows(), spJ.rows());
+	slvrQt.setIdentity();
+	slvrQt = slvr.matrixQ().transpose() * slvrQt;
+	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
 	begin = clock();
 	JacobianType slvrQ(spJ.rows(), spJ.rows());
 	slvrQ.setIdentity();
 	slvrQ = slvr.matrixQ() * slvrQ;
-	std::cout << "matrixQ() * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
 	/*
 	JacobianType slvrVec(spJ.rows(), 384);
 	for (int i = 0; i < slvrVec.rows(); i++) {
@@ -152,13 +160,10 @@ int main() {
 	//std::cout << "||Qt * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
 
-
-	Logger::instance()->logMatrixCSV(slvr.matrixY().toDense(), "slvrY.csv");
-	Logger::instance()->logMatrixCSV(slvr.matrixW().toDense(), "slvrW.csv");
-
 #if !defined(_DEBUG) && defined(OUTPUT_MAT)
 	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
-	Logger::instance()->logMatrixCSV(slvr.matrixH().toDense(), "slvrH.csv");
+	Logger::instance()->logMatrixCSV(slvr.matrixY().toDense(), "slvrY.csv");
+	Logger::instance()->logMatrixCSV(slvr.matrixW().toDense(), "slvrW.csv");
 	Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
 #endif
 
