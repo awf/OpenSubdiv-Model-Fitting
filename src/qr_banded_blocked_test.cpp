@@ -94,34 +94,40 @@ int main() {
 	/*
 	 * Solve the problem using SuiteSparse QR.
 	*/
-	/*
 	std::cout << "Solver: SPQR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	SPQRSolver spqr;
 	begin = clock();
 	spqr.compute(spJ);
-	std::cout << "Factorization: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	std::cout << "Factorization:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	begin = clock();
+	SPQRSolver::MatrixType QtSP(spJ.rows(), spJ.rows());
+	QtSP.setIdentity();
+	QtSP = spqr.matrixQ().transpose() * QtSP;
+	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	begin = clock();
 	SPQRSolver::MatrixType QSP(spJ.rows(), spJ.rows());
 	QSP.setIdentity();
 	QSP = spqr.matrixQ() * QSP;
-	std::cout << "matrixQ() * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	std::cout << "---------------------- Errors ----------------------" << std::endl;
-	std::cout << "||Q * R - J||_2  = " << (QSP * spqr.matrixR() - spJ).norm() << std::endl;
-	std::cout << "||Qt * J - R||_2 = " << (QSP.transpose() * spJ - spqr.matrixR()).norm() << std::endl;
+	std::cout << "||Q    * R - J||_2 = " << (QSP * spqr.matrixR() - spJ).norm() << std::endl;
+	std::cout << "||Q.T  * J - R||_2 = " << (QSP.transpose() * spJ - spqr.matrixR()).norm() << std::endl;
+	//std::cout << "||Qt.T * R - J||_2 = " << (QtSP.transpose() * spqr.matrixR() - spJ).norm() << std::endl;
+	//std::cout << "||Qt   * J - R||_2 = " << (QtSP * spJ - spqr.matrixR()).norm() << std::endl;
 	//std::cout << "||Qt * Q - I||_2 = " << (QSP.transpose() * QSP - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
-	*/
 
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
-	const Index blockRows = 105;//35;
-	const Index blockCols = 32;//12;
+	const Index blockRows = 14;//21;//105;//35;
+	const Index blockCols = 6;//8;//32;//12;
 	const Index blockOverlap = 2;
-	std::cout << "Solver: Banded Blocked QR (" << blockRows << ", " << blockCols << ", " << blockOverlap << ")" << std::endl;
+	std::cout << "Solver: Banded Blocked QR (r = " << blockRows << ", c = " << blockCols << ", o = " << blockOverlap << ")" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	BandedBlockedQRSolver slvr(blockRows, blockCols, blockOverlap);
 	slvr.setRoundoffEpsilon(1e-16);
@@ -155,8 +161,10 @@ int main() {
 	*/
 
 	std::cout << "---------------------- Errors ----------------------" << std::endl;
-	std::cout << "||Q * R - J||_2  = " << (slvrQ * slvr.matrixR() - spJ).norm() << std::endl;
-	std::cout << "||Qt * J - R||_2 = " << (slvrQ.transpose() * spJ - slvr.matrixR()).norm() << std::endl;
+	std::cout << "||Q    * R - J||_2 = " << (slvrQ * slvr.matrixR() - spJ).norm() << std::endl;
+	std::cout << "||Q.T  * J - R||_2 = " << (slvrQ.transpose() * spJ - slvr.matrixR()).norm() << std::endl;
+	std::cout << "||Qt.T * R - J||_2 = " << (slvrQt.transpose() * slvr.matrixR() - spJ).norm() << std::endl;
+	std::cout << "||Qt   * J - R||_2 = " << (slvrQt * spJ - slvr.matrixR()).norm() << std::endl;
 	//std::cout << "||Qt * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
 

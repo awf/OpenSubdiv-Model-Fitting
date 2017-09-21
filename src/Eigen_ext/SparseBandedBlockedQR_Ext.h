@@ -12,6 +12,8 @@
 
 #include <ctime>
 
+#define IS_ZERO(x, eps) (std::abs(x) < eps)
+
 namespace Eigen {
 
 	template<typename MatrixType, typename OrderingType> class SparseBandedBlockedQR_Ext;
@@ -416,6 +418,8 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
 			Y.col(bc) = v;
 			W.col(bc) = z;
 		}
+//		Y = Y.unaryExpr([](double x) { return (IS_ZERO(x, 1e-15) ? 0 : x); });
+//		W = W.unaryExpr([](double x) { return (IS_ZERO(x, 1e-15) ? 0 : x); });
 		//std::cout << "--- W ---\n" << W << std::endl;
 		//std::cout << "--- Y ---\n" << Y << std::endl;
 		for (int bc = 0; bc < currBlockCols; bc++) {
@@ -497,8 +501,38 @@ void SparseBandedBlockedQR_Ext<MatrixType, OrderingType>::factorize(const Matrix
   m_info = Success;
 }
 
-//#define MULTITHREADED 1
+#define MULTITHREADED 1
 #define APPROXIMATE 1
+
+// Fast implementation of dot product assuming that matrix column is generally sparser than vec
+template <typename _MatrixType, typename _SparseVector>
+Scalar fastDotProduct(const _MatrixType &mat, const Index colIdx, const _SparseVector &vec) {
+	if (vec.nonZeros() == 0) {
+		return Scalar(0);
+	}
+
+	Scalar dotTmp = 0;
+	for (_MatrixType::InnerIterator it(mat, colIdx); it; ++it) {
+		dotTmp += it.value() * vec.coeff(it.index());
+	}
+	return dotTmp;
+}
+// Fast implementation of vector weighted subtraction assuming that matrix column is generally sparser than vec
+template <typename _MatrixType, typename _SparseVector>
+void fastWeightedSubtract(_SparseVector &targetVec, const _MatrixType &mat, const Index colIdx, const Scalar weight, const Scalar eps = Scalar(0)) {
+
+#ifdef APPROXIMATE
+	if (IS_ZERO(weight, eps)) {
+#else
+	if (weight == Scalar(0)) {
+#endif
+		return;
+	}
+
+	for (_MatrixType::InnerIterator it(mat, colIdx); it; ++it) {
+		targetVec.coeffRef(it.index()) -= it.value() * weight;
+	}
+}
 
 // xxawf boilerplate all this into BlockSparseBandedBlockedQR_Ext...
 template <typename SparseBandedBlockedQR_ExtType, typename Derived>
@@ -514,7 +548,7 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
   m_qr(qr),m_other(other),m_transpose(transpose) {}
   inline Index rows() const { return m_transpose ? m_qr.rows() : m_qr.cols(); }
   inline Index cols() const { return m_other.cols(); }
-  
+
   // Assign to a vector
   template<typename DesType>
   void evalTo(DesType& res) const
@@ -528,8 +562,6 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 
 	// FixMe: Better estimation of nonzeros?
 	Eigen::TripletArray<Scalar, typename MatrixType::Index> resVals(Index(res.rows() * res.cols() * 0.1));
-
-#define IS_ZERO(x, eps) (std::abs(x) < eps)
 
 	MatrixType I(m_qr.rows(), m_qr.rows());
 	I.setIdentity();
@@ -566,9 +598,11 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 							resColJ = res.col(j);
 							for (Index k = 0; k < diagSize; k += blockWidth) {
 								for (int ii = 0; ii < blockWidth; ii++) {	// This loop gets obviously unrolled by the compiler
-									tmp.coeffRef(ii) = m_qr.m_W.col(k + ii).dot(resColJ);
+									//tmp.coeffRef(ii) = m_qr.m_W.col(k + ii).dot(resColJ);
+									tmp.coeffRef(ii) = fastDotProduct<MatrixType, SparseVector>(m_qr.m_W, k + ii, resColJ);
 								}
 
+								/*
 #ifdef APPROXIMATE
 								if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
 #else
@@ -576,8 +610,11 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 #endif
 									continue;
 								}
-
 								resColJ -= m_qr.m_Y.middleCols(k, blockWidth) * tmp;
+*/
+								for (int ii = 0; ii < blockWidth; ii++) {	// This loop is expected to get unrolled by the compiler
+									fastWeightedSubtract(resColJ, m_qr.m_Y, k + ii, tmp.coeff(ii), m_qr.m_eps);
+								}
 							}
 
 							std::lock_guard<std::mutex> lock(critical);
@@ -596,14 +633,17 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 		//Compute res = Q' * other column by column
 		const int blockWidth = m_qr.m_blockCols;
 		tmp = SparseVector(blockWidth);
+		//Scalar dotTmp = 0;
 		for (Index j = 0; j < res.cols(); j++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
 			resColJ = res.col(j);
 			for (Index k = 0; k < diagSize; k+=blockWidth) {
-				for (int ii = 0; ii < blockWidth; ii++) {	// This loop gets obviously unrolled by the compiler
-					tmp.coeffRef(ii) = m_qr.m_W.col(k + ii).dot(resColJ);
+				for (int ii = 0; ii < blockWidth; ii++) {	// This loop is expected to get unrolled by the compiler
+					//tmp.coeffRef(ii) = m_qr.m_W.col(k + ii).dot(resColJ);
+					tmp.coeffRef(ii) = fastDotProduct<MatrixType, SparseVector>(m_qr.m_W, k + ii, resColJ);
 				}
 
+				/*
 #ifdef APPROXIMATE
 				if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
 #else
@@ -611,8 +651,12 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 #endif
 					continue;
 				}
-
 				resColJ -= m_qr.m_Y.middleCols(k, blockWidth) * tmp;
+*/
+
+				for (int ii = 0; ii < blockWidth; ii++) {	// This loop is expected to get unrolled by the compiler
+					fastWeightedSubtract(resColJ, m_qr.m_Y, k + ii, tmp.coeff(ii), m_qr.m_eps);
+				}
 			}
 			// Write the result back to j-th column of res
 			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
@@ -648,9 +692,11 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 							resColJ = res.col(j);
 							for (Index k = diagSize; k > 0; k -= blockWidth) {
 								for (int ii = 0; ii < blockWidth; ii++) {	// This loop gets obviously unrolled by the compiler
-									tmp.coeffRef(ii) = m_qr.m_Y.col(k - blockWidth + ii).dot(resColJ);
+									//tmp.coeffRef(ii) = m_qr.m_Y.col(k - blockWidth + ii).dot(resColJ);
+									tmp.coeffRef(ii) = fastDotProduct<MatrixType, SparseVector>(m_qr.m_Y, k - blockWidth + ii, resColJ);
 								}
 
+								/*
 #ifdef APPROXIMATE
 								if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
 #else
@@ -658,8 +704,11 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 #endif
 									continue;
 								}
-
 								resColJ -= m_qr.m_W.middleCols(k - blockWidth, blockWidth) * tmp;
+*/
+								for (int ii = 0; ii < blockWidth; ii++) {	// This loop is expected to get unrolled by the compiler
+									fastWeightedSubtract(resColJ, m_qr.m_W, k - blockWidth + ii, tmp.coeff(ii), m_qr.m_eps);
+								}
 							}
 
 							std::lock_guard<std::mutex> lock(critical);
@@ -678,14 +727,17 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 		// Compute res = Q * other column by column
 		const int blockWidth = m_qr.m_blockCols;
 		tmp = SparseVector(blockWidth);
+		Scalar dotTmp = 0;
 		for (Index j = 0; j < res.cols(); j++) {
 			// Use temporary vector resColJ inside of the for loop - faster access
 			resColJ = res.col(j);
 			for (Index k = diagSize; k > 0; k-=blockWidth) {
-				for (int ii = 0; ii < blockWidth; ii++) {	// This loop gets obviously unrolled by the compiler
-					tmp.coeffRef(ii) = m_qr.m_Y.col(k - blockWidth + ii).dot(resColJ);
+				for (int ii = 0; ii < blockWidth; ii++) {	// This loop is expected to get unrolled by the compiler
+					//tmp.coeffRef(ii) = m_qr.m_Y.col(k - blockWidth + ii).dot(resColJ);
+					tmp.coeffRef(ii) = fastDotProduct<MatrixType, SparseVector>(m_qr.m_Y, k - blockWidth + ii, resColJ);
 				}
 
+				/*
 #ifdef APPROXIMATE
 				if (IS_ZERO(tmp.sum(), m_qr.m_eps)) {
 #else
@@ -693,8 +745,12 @@ struct SparseBandedBlockedQR_Ext_QProduct : ReturnByValue<SparseBandedBlockedQR_
 #endif
 					continue;
 				}
-				
 				resColJ -= m_qr.m_W.middleCols(k - blockWidth, blockWidth) * tmp;
+*/
+
+				for (int ii = 0; ii < blockWidth; ii++) {	// This loop is expected to get unrolled by the compiler
+					fastWeightedSubtract(resColJ, m_qr.m_W, k - blockWidth + ii, tmp.coeff(ii), m_qr.m_eps);
+				}
 			}
 			// Write the result back to j-th column of res
 			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
