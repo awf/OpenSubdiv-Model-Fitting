@@ -24,6 +24,7 @@
 #include "Eigen_ext/BlockDiagonalSparseQR_Ext.h"
 #include "Eigen_ext/SparseSubblockQR_Ext.h"
 #include "Eigen_ext/SparseBandedBlockedQR_Ext.h"
+#include "Eigen_ext/SparseBandedBlockedQR_Ext3.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -42,7 +43,7 @@ int main() {
 	Logger::instance()->log(Logger::Info, "QR Banded Test STARTED!");
 
 	std::default_random_engine gen;
-	std::uniform_real_distribution<double> dist(0.0, 1.0);
+	std::uniform_real_distribution<double> dist(0.5, 5.0);
 
 	Eigen::Index numVars = 1024;
 	Eigen::Index numParams = numVars * 2;
@@ -54,7 +55,8 @@ int main() {
 	typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
 	typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
 	typedef SparseQR_Ext<JacobianType, NaturalOrdering<int> > GeneralQRSolver;
-	typedef SparseBandedBlockedQR_Ext<JacobianType, NaturalOrdering<int> > BandedBlockedQRSolver;
+	//typedef SparseBandedBlockedQR_Ext<JacobianType, NaturalOrdering<int> > BandedBlockedQRSolver;
+	typedef SparseBandedBlockedQR_Ext3<JacobianType, NaturalOrdering<int> > BandedBlockedQRSolver;
 	typedef SPQR<JacobianType> SPQRSolver;
 
 	/*
@@ -94,6 +96,7 @@ int main() {
 	/*
 	 * Solve the problem using SuiteSparse QR.
 	*/
+	/*
 	std::cout << "Solver: SPQR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	SPQRSolver spqr;
@@ -120,12 +123,12 @@ int main() {
 	//std::cout << "||Qt   * J - R||_2 = " << (QtSP * spJ - spqr.matrixR()).norm() << std::endl;
 	//std::cout << "||Qt * Q - I||_2 = " << (QSP.transpose() * QSP - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
-
+	*/
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
-	const Index blockRows = 14;//21;//105;//35;
-	const Index blockCols = 6;//8;//32;//12;
+	const Index blockRows = 35;//14;//21;//105;//35;
+	const Index blockCols = 12;//6;//8;//32;//12;
 	const Index blockOverlap = 2;
 	std::cout << "Solver: Banded Blocked QR (r = " << blockRows << ", c = " << blockCols << ", o = " << blockOverlap << ")" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
@@ -137,16 +140,17 @@ int main() {
 	std::cout << "Factorization:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	begin = clock();
+	JacobianType slvrQ(spJ.rows(), spJ.rows());
+	slvrQ.setIdentity();
+	slvrQ = slvr.matrixQ() * slvrQ;
+	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
+	begin = clock();
 	JacobianType slvrQt(spJ.rows(), spJ.rows());
 	slvrQt.setIdentity();
 	slvrQt = slvr.matrixQ().transpose() * slvrQt;
 	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
-	begin = clock();
-	JacobianType slvrQ(spJ.rows(), spJ.rows());
-	slvrQ.setIdentity();
-	slvrQ = slvr.matrixQ() * slvrQ;
-	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	/*
 	JacobianType slvrVec(spJ.rows(), 384);
@@ -171,7 +175,7 @@ int main() {
 #if !defined(_DEBUG) && defined(OUTPUT_MAT)
 	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
 	Logger::instance()->logMatrixCSV(slvr.matrixY().toDense(), "slvrY.csv");
-	Logger::instance()->logMatrixCSV(slvr.matrixW().toDense(), "slvrW.csv");
+	Logger::instance()->logMatrixCSV(slvr.matrixT().toDense(), "slvrT.csv");
 	Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
 #endif
 
