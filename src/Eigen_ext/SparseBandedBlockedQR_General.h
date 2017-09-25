@@ -122,19 +122,16 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBandedBlockedQR_General() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2), m_blockOverlap(2)
+		SparseBandedBlockedQR_General() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false)
 		{ }
-			
-		SparseBandedBlockedQR_General(const Index &_blockRows, const Index &_blockCols, const Index &_blockOverlap) 
-			: m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(_blockRows), m_blockCols(_blockCols), m_blockOverlap(_blockOverlap)
-		{ }
+	
 		/** Construct a QR factorization of the matrix \a mat.
 		  *
 		  * \warning The matrix \a mat must be in compressed mode (see SparseMatrix::makeCompressed()).
 		  *
 		  * \sa compute()
 		  */
-		explicit SparseBandedBlockedQR_General(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false), m_eps(1e-16), m_blockRows(4), m_blockCols(2), m_blockOverlap(2)
+		explicit SparseBandedBlockedQR_General(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_isHSorted(false)
 		{
 			compute(mat);
 		}
@@ -208,18 +205,6 @@ namespace Eigen {
 		SparseBandedBlockedQR_GeneralMatrixQReturnType<SparseBandedBlockedQR_General> matrixQ() const
 		{
 			return SparseBandedBlockedQR_GeneralMatrixQReturnType<SparseBandedBlockedQR_General>(*this);
-		}
-
-		// Return the matrices of the WY Householder representation
-		const MatrixRType& matrixY() const {
-			return this->m_Y;
-		}
-		const MatrixRType& matrixT() const {
-			return this->m_T;
-		}
-
-		void setRoundoffEpsilon(const RealScalar &_eps) {
-			this->m_eps = _eps;
 		}
 
 		/** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
@@ -328,14 +313,9 @@ namespace Eigen {
 		bool m_useDefaultThreshold;     // Use default threshold
 		Index m_nonzeropivots;          // Number of non zero pivots found
 		bool m_isHSorted;               // whether Q is sorted or not
-		RealScalar m_eps;
 
 		BlockInfoMap m_blockMap;
 		BlockInfoMapOrder m_blockOrder;
-
-		const Index m_blockRows;
-		const Index m_blockCols;
-		const Index m_blockOverlap;
 
 		template <typename, typename > friend struct SparseBandedBlockedQR_General_QProduct;
 

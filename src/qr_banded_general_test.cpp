@@ -137,13 +137,9 @@ int main() {
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
-	const Index blockRows = 7;//35;//14;//21;//105;//35;
-	const Index blockCols = 4;//12;//6;//8;//32;//12;
-	const Index blockOverlap = 2;
-	std::cout << "Solver: Banded Blocked QR (r = " << blockRows << ", c = " << blockCols << ", o = " << blockOverlap << ")" << std::endl;
+	std::cout << "Solver: General Banded Blocked QR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
-	BandedBlockedQRSolver slvr(blockRows, blockCols, blockOverlap);
-	slvr.setRoundoffEpsilon(1e-16);
+	BandedBlockedQRSolver slvr;
 
 	begin = clock();
 	slvr.compute(spJ);
