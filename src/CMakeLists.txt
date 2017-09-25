@@ -130,6 +130,40 @@ ADD_EXECUTABLE(Fit-Subdiv-Jacobian-Test
 	
 TARGET_LINK_LIBRARIES(Fit-Subdiv-Jacobian-Test ${OSD_LIB} ${SSP_LIB})
 
+ADD_EXECUTABLE(ICP-Align-3D-Points
+	icp_align_3d_points.cpp
+    MeshTopology.cpp
+    log3d.cpp
+	SubdivEvaluator.cpp
+	RigidTransform.cpp
+	PLYParser.cpp
+	Logger.cpp
+	FPJParser.cpp
+	BezierPatch.cpp
+	Optimization/BaseFunctor.cpp
+	Optimization/ICPFunctor.cpp
+    MeshTopology.h
+    log3d.h
+	SubdivEvaluator.h
+	RigidTransform.h
+	PLYParser.h
+	Logger.h
+	FPJParser.h
+	BezierPatch.h
+	Optimization/BaseFunctor.h
+	Optimization/ICPFunctor.h
+	Eigen_ext/eigen_extras.h
+	Eigen_ext/BlockSparseQR_Ext.h
+	Eigen_ext/SparseSubblockQR_Ext.h
+	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
+	)
+	
+TARGET_LINK_LIBRARIES(ICP-Align-3D-Points ${OSD_LIB} ${SSP_LIB})
+
+
 # Tests
 ADD_EXECUTABLE(QR_Solver_Test
 	qr_solver_test.cpp
@@ -192,8 +226,42 @@ ADD_EXECUTABLE(QR_Banded_Test
 	Eigen_ext/SparseBandedQR_Ext.h
 	Eigen_ext/SparseBandedQR_Ext2.h
 	)
-	
+		
+ADD_EXECUTABLE(QR_Banded_Blocked_Test
+	qr_banded_blocked_test.cpp
+    Logger.cpp
+	Logger.h
+	Eigen_ext/eigen_extras.h
+	Eigen_ext/BlockSparseQR_Ext.h
+	Eigen_ext/SparseSubblockQR_Ext.h
+	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
+	Eigen_ext/SparseBandedBlockedQR_Ext.h
+	Eigen_ext/SparseBandedBlockedQR_Ext2.h
+	Eigen_ext/SparseBandedBlockedQR_Ext3.h
+	)
+
+ADD_EXECUTABLE(QR_Banded_General_Test
+	qr_banded_general_test.cpp
+    Logger.cpp
+	Logger.h
+	Eigen_ext/eigen_extras.h
+	Eigen_ext/BlockSparseQR_Ext.h
+	Eigen_ext/SparseSubblockQR_Ext.h
+	Eigen_ext/BlockDiagonalSparseQR_Ext.h
+	Eigen_ext/SparseQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext.h
+	Eigen_ext/SparseBandedQR_Ext2.h
+	Eigen_ext/SparseBandedBlockedQR_Ext.h
+	Eigen_ext/SparseBandedBlockedQR_Ext2.h
+	Eigen_ext/SparseBandedBlockedQR_Ext3.h
+	Eigen_ext/SparseBandedBlockedQR_General.h
+	)
 
 TARGET_LINK_LIBRARIES(QR_Solver_Test ${OSD_LIB} ${SSP_LIB})
 TARGET_LINK_LIBRARIES(QR_Diagonalization_Test ${OSD_LIB} ${SSP_LIB})
 TARGET_LINK_LIBRARIES(QR_Banded_Test ${OSD_LIB} ${SSP_LIB})
+TARGET_LINK_LIBRARIES(QR_Banded_Blocked_Test ${OSD_LIB} ${SSP_LIB})
+TARGET_LINK_LIBRARIES(QR_Banded_General_Test ${OSD_LIB} ${SSP_LIB})
