@@ -16,7 +16,7 @@
 
 namespace Eigen {
 
-	template<typename MatrixType, typename OrderingType> class SparseBandedBlockedQR_General;
+	template<typename MatrixType, typename OrderingType, int MaxBlockRows> class SparseBandedBlockedQR_General;
 	template<typename SparseBandedBlockedQR_GeneralType> struct SparseBandedBlockedQR_GeneralMatrixQReturnType;
 	template<typename SparseBandedBlockedQR_GeneralType> struct SparseBandedBlockedQR_GeneralMatrixQTransposeReturnType;
 	template<typename SparseBandedBlockedQR_GeneralType, typename Derived> struct SparseBandedBlockedQR_General_QProduct;
@@ -76,11 +76,11 @@ namespace Eigen {
 	  * \warning The input sparse matrix A must be in compressed mode (see SparseMatrix::makeCompressed()).
 	  *
 	  */
-	template<typename _MatrixType, typename _OrderingType>
-	class SparseBandedBlockedQR_General : public SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType> >
+	template<typename _MatrixType, typename _OrderingType, int _MaxBlockRows>
+	class SparseBandedBlockedQR_General : public SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType, _MaxBlockRows> >
 	{
 	protected:
-		typedef SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType> > Base;
+		typedef SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType, _MaxBlockRows> > Base;
 		using Base::m_isInitialized;
 	public:
 		using Base::_solve_impl;
@@ -348,6 +348,8 @@ namespace Eigen {
 		bool operator<(const RowRange &rr) const {
 			if (this->start < rr.start) {
 				return true;
+			//} else if (this->end < rr.end) {
+			//	return true;
 			} else if(this->start == rr.start) {
 				if (this->length < rr.length) {
 					return true;
@@ -360,8 +362,25 @@ namespace Eigen {
 		}
 	};
 
-	template <typename MatrixType, typename OrderingType>
-	void SparseBandedBlockedQR_General<MatrixType, OrderingType>::analyzePattern(const MatrixType& mat)
+	template <typename IndexType>
+	bool endSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
+		return !(lhs.start > rhs.start) && lhs.end < rhs.end;
+	}
+	template <typename IndexType>
+	bool startSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
+		return lhs.start < rhs.start;
+	}
+	template <typename IndexType>
+	bool startPlusLengthSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
+		if (lhs.start < rhs.start) {
+			return true;
+		} else {
+			return (lhs.start + lhs.length) < (rhs.start + rhs.length);
+		}
+	}
+	
+	template <typename MatrixType, typename OrderingType, int MaxBlockRows>
+	void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::analyzePattern(const MatrixType& mat)
 	{
 		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
 		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
@@ -401,28 +420,78 @@ namespace Eigen {
 		}
 		
 		// Sort the rows to form as-banded-as-possible matrix
-		std::sort(rowRanges.begin(), rowRanges.end());
-
-		// Create map of block information structures
-		// Create vector of permutation indices
+		std::sort(rowRanges.begin(), rowRanges.end());//, startPlusLengthSmaller<MatrixType::StorageIndex>);
+		//std::stable_sort(rowRanges.begin(), rowRanges.end(), startSmaller<MatrixType::StorageIndex>);
+		
 		Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
 		MatrixType::StorageIndex rowIdx = 0;
+		MatrixType::StorageIndex prevEnd = 0;
+		//MatrixType::StorageIndex prevEnd = 0;
 		for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
 			permIndices(it->origIdx) = rowIdx;
 
 			if (std::find(this->m_blockOrder.begin(), this->m_blockOrder.end(), it->start) == this->m_blockOrder.end()) {
 				this->m_blockOrder.push_back(it->start);
-				this->m_blockMap.insert(std::make_pair(it->start, MatrixBlockInfo(rowIdx, it->start, bandHeights.at(it->start), bandWidths.at(it->start))));
+				int bw = bandWidths.at(it->start);
+				// Make sure that the next block ends at the same place as the previous one or further
+				if (it->start + bw < prevEnd) {
+					bw = prevEnd - it->start;
+				}
+				this->m_blockMap.insert(std::make_pair(it->start, MatrixBlockInfo(rowIdx, it->start, bandHeights.at(it->start), bw)));
+				prevEnd = it->start + bw;
 			}
 		}
 		this->m_rowPerm = PermutationType(permIndices);
 
-		/*
-		for (int i = 0; i < this->m_blockOrder.size(); i++) {
-			std::cout << "(" << this->m_blockMap.at(this->m_blockOrder.at(i)).rowIdx << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).colIdx << "): " 
-				<< this->m_blockMap.at(this->m_blockOrder.at(i)).numRows << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).numCols << std::endl;
+		// Merge several blocks together
+		BlockInfoMap newBlockMap;
+		BlockInfoMapOrder newBlockOrder;
+		MatrixBlockInfo firstBlock;
+		int prevBlockEndCol = 0;
+		int sumRows = 0;
+		int numCols = 0;
+		int blockOverlap = 0;
+		auto it = this->m_blockOrder.begin();
+		for (; it != this->m_blockOrder.end(); ++it) {
+			if (sumRows == 0) {
+				firstBlock = this->m_blockMap.at(*it);
+			}
+
+			sumRows += this->m_blockMap.at(*it).numRows;
+			numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
+			if(sumRows >= MaxBlockRows && sumRows > numCols) {
+			//if(this->m_blockMap.at(*it).colIdx - firstBlock.colIdx > firstBlock.numCols / 2 && sumRows > numCols) {
+				newBlockOrder.push_back(firstBlock.colIdx);
+				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
+
+				sumRows = 0;
+				prevBlockEndCol = firstBlock.colIdx + numCols;
+			}
 		}
-		*/
+		// Process also last collection
+		--it;
+		if (sumRows > 0) {
+			//if (sumRows >= MaxBlockRows && sumRows > numCols) {
+			if (this->m_blockMap.at(*it).colIdx - firstBlock.colIdx > 2 && sumRows > numCols) {
+				newBlockOrder.push_back(firstBlock.colIdx);
+				int numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
+				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
+			}
+			else {
+				firstBlock = newBlockMap[newBlockOrder.back()];
+				int numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
+				newBlockMap[newBlockOrder.back()] = MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, firstBlock.numRows + sumRows, numCols);
+			}
+		}
+		// Update block structure
+		this->m_blockOrder = newBlockOrder;
+		this->m_blockMap = newBlockMap;
+
+	//	for (int i = 0; i < this->m_blockOrder.size(); i++) {
+	//		std::cout << "(" << this->m_blockMap.at(this->m_blockOrder.at(i)).rowIdx << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).colIdx << "): " 
+	//			<< this->m_blockMap.at(this->m_blockOrder.at(i)).numRows << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).numCols << std::endl;
+	//	}
+		
 
 		MatrixType::StorageIndex numBlocks = this->m_blockOrder.size();
 
@@ -441,8 +510,8 @@ namespace Eigen {
  * The operation is happening in-place => result is stored in V.
  * !!! This implementation is efficient only because the input matrices are assumed to be dense, thin and with reasonable amount of rows. !!!
  */
-template <typename MatrixType, typename OrderingType>
-void SparseBandedBlockedQR_General<MatrixType, OrderingType>::yty_product_transposed(const MatrixXd &T, const MatrixXd &Y, MatrixXd &V) {
+template <typename MatrixType, typename OrderingType, int MaxBlockRows>
+void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::yty_product_transposed(const MatrixXd &T, const MatrixXd &Y, MatrixXd &V) {
 	for (int j = 0; j < V.cols(); j++) {
 		V.col(j) += (Y * (T.transpose() * (Y.transpose() * V.col(j))));
 		//V.col(j) = (MatrixXd::Identity(Y.rows(), Y.rows()) - Y * T * Y.transpose()).transpose() * V.col(j);
@@ -458,8 +527,8 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType>::yty_product_transp
   *
   * \param mat The sparse column-major matrix
   */
-template <typename MatrixType, typename OrderingType>
-void SparseBandedBlockedQR_General<MatrixType, OrderingType>::factorize(const MatrixType& mat)
+template <typename MatrixType, typename OrderingType, int MaxBlockRows>
+void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::factorize(const MatrixType& mat)
 {
 	// Not rank-revealing, column permutation is identity
 	m_outputPerm_c.setIdentity(mat.cols());
@@ -533,17 +602,20 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType>::factorize(const Ma
 		if (i < numBlocks - 1) {
 			biNext = this->m_blockMap.at(this->m_blockOrder.at(i + 1));
 			blockOverlap = (bi.colIdx + bi.numCols) - biNext.colIdx;
+		//	std::cout << blockOverlap << std::endl;
 			colIncrement = bi.numCols - blockOverlap;
 			activeRows = bi.numRows + biNext.numRows - colIncrement;
 			numZeros = (biNext.rowIdx + biNext.numRows) - activeRows - biNext.colIdx;
 			numZeros = (numZeros < 0) ? 0 : numZeros;
 
-	//		std::cout << "--- V ---\n" << V << std::endl;
-	//		std::cout << "--- Ji ---\n" << Ji << std::endl;
+	//		std::cout << "--- V ---\n" << V.rightCols(4) << std::endl;
+	//		std::cout << "--- Ji ---\n" << Ji.rightCols(4) << std::endl;
 			Ji = m_pmat.block(bi.rowIdx + colIncrement, biNext.colIdx, activeRows, biNext.numCols).toDense();
-	//		std::cout << "--- Jin ---\n" << Ji << std::endl;
-			Ji.block(0, 0, activeRows - biNext.numRows, blockOverlap) = V.block(colIncrement, colIncrement, activeRows - biNext.numRows, blockOverlap);
-	//		std::cout << "--- Jinu ---\n" << Ji << std::endl;
+	//		std::cout << "--- Jin ---\n" << Ji.rightCols(4) << std::endl;
+			if (blockOverlap > 0) {
+				Ji.block(0, 0, activeRows - biNext.numRows, blockOverlap) = V.block(colIncrement, colIncrement, activeRows - biNext.numRows, blockOverlap);
+			}
+	//		std::cout << "--- Jinu ---\n" << Ji.rightCols(4) << std::endl;
 	//		std::cout << "----------------" << std::endl;
 		}
 	}
