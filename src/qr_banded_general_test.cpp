@@ -151,7 +151,6 @@ int main() {
 	/*
 	 * Solve the problem using SuiteSparse QR.
 	*/
-	/*
 	std::cout << "Solver: SPQR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	SPQRSolver spqr;
@@ -171,7 +170,30 @@ int main() {
 	QtSP.setIdentity();
 	QtSP = spqr.matrixQ().transpose() * QtSP;
 	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-	
+
+	std::cout << "Solve LS: " << std::endl;
+	JacobianType slvrVecSP(spJ.rows(), 1);
+	for (int i = 0; i < slvrVecSP.rows(); i++) {
+		for (int j = 0; j < slvrVecSP.cols(); j++) {
+			slvrVecSP.coeffRef(i, j) = dist(gen);
+		}
+	}
+	int nVecEvals = 1000;
+	begin = clock();
+	JacobianType resSP;
+	for(int i = 0; i < nVecEvals; i++) {
+		resSP = spqr.matrixQ() * slvrVecSP;
+	}
+	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+
+	begin = clock();
+	VectorXd resDenseSP = resSP.toDense();
+	VectorXd solvedSP;
+	for (int i = 0; i < nVecEvals; i++) {
+		solvedSP = spqr.matrixR().template triangularView<Upper>().solve(resDenseSP);
+	}
+	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+
 	std::cout << "Q non-zeros: " << QSP.nonZeros() << " (" << (QSP.nonZeros() / double(QSP.rows() * QSP.cols())) * 100 << "%)" << std::endl;
 	std::cout << "---------------------- Errors ----------------------" << std::endl;
 	std::cout << "||Q    * R - J||_2 = " << (QSP * spqr.matrixR() - spJ).norm() << std::endl;
@@ -180,7 +202,7 @@ int main() {
 	//std::cout << "||Qt   * J - R||_2 = " << (QtSP * spJ - spqr.matrixR()).norm() << std::endl;
 	//std::cout << "||Qt * Q - I||_2 = " << (QSP.transpose() * QSP - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
-	*/
+	
 	/*
 	* Solve the problem using special banded QR solver.
 	*/
@@ -222,17 +244,28 @@ int main() {
 	slvrQt = slvr.matrixQ().transpose() * slvrQt;
 	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
-	/*
-	JacobianType slvrVec(spJ.rows(), 384);
+	std::cout << "Solve LS: " << std::endl;
+	JacobianType slvrVec(spJ.rows(), 1);
 	for (int i = 0; i < slvrVec.rows(); i++) {
 		for (int j = 0; j < slvrVec.cols(); j++) {
 			slvrVec.coeffRef(i, j) = dist(gen);
 		}
 	}
 	begin = clock();
-	slvrVec = slvrQ * slvrVec;
-	std::cout << "Slvr vec elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-	*/
+	JacobianType res;
+	for(int i = 0; i < nVecEvals; i++) {
+		res = slvr.matrixQ() * slvrVec;
+	}
+	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+
+	begin = clock();
+	VectorXd resDense = res.toDense();
+	VectorXd solved;
+	for (int i = 0; i < nVecEvals; i++) {
+		solved = slvr.matrixR().template triangularView<Upper>().solve(resDense);
+	}
+	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+
 	std::cout << "Q non-zeros: " << slvrQ.nonZeros() << " (" << (slvrQ.nonZeros() / double(slvrQ.rows() * slvrQ.cols())) * 100 << "%)" << std::endl;
 	std::cout << "---------------------- Errors ----------------------" << std::endl;
 	std::cout << "||Q    * R - J||_2 = " << (slvrQ * slvr.matrixR() - spJ).norm() << std::endl;
