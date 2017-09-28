@@ -11,12 +11,13 @@
 #define EIGEN_SPARSE_BANDED_BLOCKED_QR_GENERAL_H
 
 #include <ctime>
+#include <typeinfo>
 
 #define IS_ZERO(x, eps) (std::abs(x) < eps)
 
 namespace Eigen {
 
-	template<typename MatrixType, typename OrderingType, int MaxBlockRows> class SparseBandedBlockedQR_General;
+	template<typename MatrixType, typename OrderingType, int SuggestedBlockCols> class SparseBandedBlockedQR_General;
 	template<typename SparseBandedBlockedQR_GeneralType> struct SparseBandedBlockedQR_GeneralMatrixQReturnType;
 	template<typename SparseBandedBlockedQR_GeneralType> struct SparseBandedBlockedQR_GeneralMatrixQTransposeReturnType;
 	template<typename SparseBandedBlockedQR_GeneralType, typename Derived> struct SparseBandedBlockedQR_General_QProduct;
@@ -76,11 +77,11 @@ namespace Eigen {
 	  * \warning The input sparse matrix A must be in compressed mode (see SparseMatrix::makeCompressed()).
 	  *
 	  */
-	template<typename _MatrixType, typename _OrderingType, int _MaxBlockRows>
-	class SparseBandedBlockedQR_General : public SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType, _MaxBlockRows> >
+	template<typename _MatrixType, typename _OrderingType, int _SuggestedBlockCols = 2>
+	class SparseBandedBlockedQR_General : public SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType, _SuggestedBlockCols> >
 	{
 	protected:
-		typedef SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType, _MaxBlockRows> > Base;
+		typedef SparseSolverBase<SparseBandedBlockedQR_General<_MatrixType, _OrderingType, _SuggestedBlockCols> > Base;
 		using Base::m_isInitialized;
 	public:
 		using Base::_solve_impl;
@@ -306,7 +307,7 @@ namespace Eigen {
 		MatrixRType m_R;                // The triangular factor matrix
 		std::vector<MatrixXd> m_denseT;	// Vector of blocks T of YTY' Householder blocks (compact WY' representation)
 		std::vector<MatrixXd> m_denseY; // Vector of blocks Y of YTY' Householder blocks (compact WY' representation)
-		std::vector<Vector4i> m_idxsY;  // Remembering block alignment necessary during the Householder product evaluation phase
+		std::vector<Matrix<StorageIndex, 4, 1> > m_idxsY;  // Remembering block alignment necessary during the Householder product evaluation phase
 		PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
 		PermutationType m_rowPerm;
 		RealScalar m_threshold;         // Threshold to determine null Householder reflections
@@ -348,27 +349,46 @@ namespace Eigen {
 		bool operator<(const RowRange &rr) const {
 			if (this->start < rr.start) {
 				return true;
-			//} else if (this->end < rr.end) {
-			//	return true;
-			} else if(this->start == rr.start) {
-				if (this->length < rr.length) {
-					return true;
-				} else {
-					return false;
-				}
-			} else {
-				return false;
+			}
+			else {
+				return (rr.start < this->end) && (this->end > rr.end);
 			}
 		}
 	};
 
 	template <typename IndexType>
 	bool endSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
-		return !(lhs.start > rhs.start) && lhs.end < rhs.end;
+		return lhs.end < rhs.end;
 	}
 	template <typename IndexType>
 	bool startSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
-		return lhs.start < rhs.start;
+		try {
+			return (lhs.start < rhs.start);
+		}
+		catch(std::exception &e) {
+			throw e;
+		}
+	}
+	template <typename IndexType>
+	bool startSmaller2(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
+		try{
+			if (lhs.start < rhs.start) {
+				return true;
+			}
+			else {
+				return (rhs.start < lhs.end) && (lhs.end > rhs.end);
+			}
+		}
+		catch (std::exception &e) {
+			throw e;
+		}
+		//return lhs.start < rhs.start;
+	}
+	template <typename IndexType>
+	bool centerSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
+		return (lhs.start + lhs.length / 2) < (rhs.start + rhs.length / 2);
+		//return (lhs.start < rhs.start) && (lhs.end < rhs.end);
+		//return  (lhs.end < rhs.end);
 	}
 	template <typename IndexType>
 	bool startPlusLengthSmaller(const RowRange<IndexType> &lhs, const RowRange<IndexType> &rhs) {
@@ -379,24 +399,22 @@ namespace Eigen {
 		}
 	}
 	
-	template <typename MatrixType, typename OrderingType, int MaxBlockRows>
-	void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::analyzePattern(const MatrixType& mat)
+	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols>
+	void SparseBandedBlockedQR_General<MatrixType, OrderingType, SuggestedBlockCols>::analyzePattern(const MatrixType& mat)
 	{
 		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
 		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
 		typedef SparseMatrix<Scalar, RowMajor, MatrixType::StorageIndex> RowMajorMatrixType;
-
-		BlockBandSize bandWidths;
-		BlockBandSize bandHeights;
 
 		Index n = mat.cols();
 		Index m = mat.rows();
 		Index diagSize = (std::min)(m, n);
 
 		// Go through the matrix and reorder rows so that the matrix gets as-banded-as-possible structure
+		BlockBandSize bandWidths, bandHeights;
 		RowMajorMatrixType rmMat(mat);
 		std::vector<MatrixRowRange> rowRanges;
-		for (int j = 0; j < rmMat.rows(); j++) {
+		for (MatrixType::StorageIndex j = 0; j < rmMat.rows(); j++) {
 			RowMajorMatrixType::InnerIterator rowIt(rmMat, j);
 			MatrixType::StorageIndex startIdx = rowIt.index();
 			MatrixType::StorageIndex endIdx = startIdx;
@@ -406,7 +424,8 @@ namespace Eigen {
 			MatrixType::StorageIndex bw = endIdx - startIdx + 1;
 			if (bandWidths.find(startIdx) == bandWidths.end()) {
 				bandWidths.insert(std::make_pair(startIdx, bw));
-			} else {
+			}
+			else {
 				if (bandWidths.at(startIdx) < bw) {
 					bandWidths.at(startIdx) = bw;
 				}
@@ -414,43 +433,106 @@ namespace Eigen {
 
 			if (bandHeights.find(startIdx) == bandHeights.end()) {
 				bandHeights.insert(std::make_pair(startIdx, 1));
-			} else {
+			}
+			else {
 				bandHeights.at(startIdx) += 1;
 			}
 		}
-		
+
 		// Sort the rows to form as-banded-as-possible matrix
-		std::sort(rowRanges.begin(), rowRanges.end());//, startPlusLengthSmaller<MatrixType::StorageIndex>);
-		//std::stable_sort(rowRanges.begin(), rowRanges.end(), startSmaller<MatrixType::StorageIndex>);
-		
+		std::sort(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
+			return (lhs.start < rhs.start);
+		});
+
+		/*
+		int currStart = 0;
+		int currBw = bandWidths.at(currStart);
+		std::vector<MatrixRowRange> newRowRanges;
+		std::vector< std::vector<MatrixRowRange>::iterator > toErase;
+		bool concat = false;
+		while (!rowRanges.empty()) {
+			for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it) {
+				if (it->start == currStart) {
+					newRowRanges.push_back(*it);
+					toErase.push_back(it);
+				}
+				else if (it->end <= (currStart + currBw)) {
+					newRowRanges.push_back(*it);
+					toErase.push_back(it);
+				}
+			}
+
+			if (toErase.size() > 0) {
+				if(concat) {
+					this->m_blockMap.at(this->m_blockOrder.back()) = MatrixBlockInfo(
+						this->m_blockMap.at(this->m_blockOrder.back()).rowIdx, this->m_blockMap.at(this->m_blockOrder.back()).colIdx, 
+						this->m_blockMap.at(this->m_blockOrder.back()).numRows + toErase.size(), 
+						this->m_blockMap.at(this->m_blockOrder.back()).numCols + (currStart + currBw - (this->m_blockMap.at(this->m_blockOrder.back()).colIdx + this->m_blockMap.at(this->m_blockOrder.back()).numCols)));
+					
+					concat = false;
+				}
+				else {
+					this->m_blockOrder.push_back(currStart);
+					this->m_blockMap.insert(std::make_pair(currStart, MatrixBlockInfo(newRowRanges.size() - toErase.size(), currStart, toErase.size(), currBw)));
+				}
+				
+				if (this->m_blockMap.at(this->m_blockOrder.back()).numRows <= this->m_blockMap.at(this->m_blockOrder.back()).numCols 
+					|| this->m_blockMap.at(this->m_blockOrder.back()).numCols < SuggestedBlockCols) {
+					concat = true;
+				}
+			}
+
+			while (!toErase.empty()) {
+				rowRanges.erase(toErase.back());
+				toErase.pop_back();
+			}
+
+			currStart++;
+			while (bandWidths.find(currStart) == bandWidths.end()) {
+				currStart++;
+			}
+			currBw = bandWidths.at(currStart);
+		}
+		rowRanges = newRowRanges;
+
 		Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
 		MatrixType::StorageIndex rowIdx = 0;
-		MatrixType::StorageIndex prevEnd = 0;
-		//MatrixType::StorageIndex prevEnd = 0;
+		for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
+			permIndices(it->origIdx) = rowIdx;
+		}
+		this->m_rowPerm = PermutationType(permIndices);
+		*/
+		///*
+		// Search for the blocks		
+		MatrixType::StorageIndex maxColStep = 0;
+		for(MatrixType::StorageIndex j = 0; j < rowRanges.size() - 1; j++) {
+			if ((rowRanges.at(j + 1).start - rowRanges.at(j).start) > maxColStep) {
+				maxColStep = (rowRanges.at(j + 1).start - rowRanges.at(j).start);
+			}
+		}
+		//std::cout << "MaxColStep: " << maxColStep << std::endl;
+		// And now create the final blocks
+		Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
+		MatrixType::StorageIndex rowIdx = 0;
 		for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
 			permIndices(it->origIdx) = rowIdx;
 
 			if (std::find(this->m_blockOrder.begin(), this->m_blockOrder.end(), it->start) == this->m_blockOrder.end()) {
 				this->m_blockOrder.push_back(it->start);
-				int bw = bandWidths.at(it->start);
-				// Make sure that the next block ends at the same place as the previous one or further
-				if (it->start + bw < prevEnd) {
-					bw = prevEnd - it->start;
-				}
-				this->m_blockMap.insert(std::make_pair(it->start, MatrixBlockInfo(rowIdx, it->start, bandHeights.at(it->start), bw)));
-				prevEnd = it->start + bw;
+				this->m_blockMap.insert(std::make_pair(it->start, MatrixBlockInfo(rowIdx, it->start, bandHeights.at(it->start), bandWidths.at(it->start))));
 			}
 		}
 		this->m_rowPerm = PermutationType(permIndices);
-
+		
 		// Merge several blocks together
 		BlockInfoMap newBlockMap;
 		BlockInfoMapOrder newBlockOrder;
 		MatrixBlockInfo firstBlock;
-		int prevBlockEndCol = 0;
-		int sumRows = 0;
-		int numCols = 0;
-		int blockOverlap = 0;
+		MatrixType::StorageIndex prevBlockEndCol = 0;
+		MatrixType::StorageIndex sumRows = 0;
+		MatrixType::StorageIndex numCols = 0;
+		MatrixType::StorageIndex colStep = 0;
+		MatrixType::StorageIndex blockOverlap = 0;
 		auto it = this->m_blockOrder.begin();
 		for (; it != this->m_blockOrder.end(); ++it) {
 			if (sumRows == 0) {
@@ -459,7 +541,9 @@ namespace Eigen {
 
 			sumRows += this->m_blockMap.at(*it).numRows;
 			numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
-			if(sumRows >= MaxBlockRows && sumRows > numCols) {
+			colStep = this->m_blockMap.at(*it).colIdx - firstBlock.colIdx;
+			//if(sumRows >= SuggestedBlockCols && sumRows > numCols && numCols >= 2) {
+			if ((newBlockOrder.empty() || colStep >= maxColStep / 2 - 1) && sumRows > numCols && numCols >= SuggestedBlockCols) {
 			//if(this->m_blockMap.at(*it).colIdx - firstBlock.colIdx > firstBlock.numCols / 2 && sumRows > numCols) {
 				newBlockOrder.push_back(firstBlock.colIdx);
 				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
@@ -471,8 +555,10 @@ namespace Eigen {
 		// Process also last collection
 		--it;
 		if (sumRows > 0) {
-			//if (sumRows >= MaxBlockRows && sumRows > numCols) {
-			if (this->m_blockMap.at(*it).colIdx - firstBlock.colIdx > 2 && sumRows > numCols) {
+			colStep = this->m_blockMap.at(*it).colIdx - firstBlock.colIdx;
+			//if (sumRows >= SuggestedBlockCols && sumRows > numCols && numCols >= 2) {
+			if (colStep >= maxColStep / 2 && sumRows > numCols && numCols >= SuggestedBlockCols) {
+			//if (this->m_blockMap.at(*it).colIdx - firstBlock.colIdx > 2 && sumRows > numCols2) {
 				newBlockOrder.push_back(firstBlock.colIdx);
 				int numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
 				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
@@ -486,11 +572,13 @@ namespace Eigen {
 		// Update block structure
 		this->m_blockOrder = newBlockOrder;
 		this->m_blockMap = newBlockMap;
-
-	//	for (int i = 0; i < this->m_blockOrder.size(); i++) {
-	//		std::cout << "(" << this->m_blockMap.at(this->m_blockOrder.at(i)).rowIdx << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).colIdx << "): " 
-	//			<< this->m_blockMap.at(this->m_blockOrder.at(i)).numRows << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).numCols << std::endl;
-	//	}
+		//*/
+		/*
+		for (int i = 0; i < this->m_blockOrder.size(); i++) {
+			std::cout << "(" << this->m_blockMap.at(this->m_blockOrder.at(i)).rowIdx << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).colIdx << "): "
+				<< this->m_blockMap.at(this->m_blockOrder.at(i)).numRows << ", " << this->m_blockMap.at(this->m_blockOrder.at(i)).numCols << std::endl;
+		}
+		*/
 		
 
 		MatrixType::StorageIndex numBlocks = this->m_blockOrder.size();
@@ -510,8 +598,8 @@ namespace Eigen {
  * The operation is happening in-place => result is stored in V.
  * !!! This implementation is efficient only because the input matrices are assumed to be dense, thin and with reasonable amount of rows. !!!
  */
-template <typename MatrixType, typename OrderingType, int MaxBlockRows>
-void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::yty_product_transposed(const MatrixXd &T, const MatrixXd &Y, MatrixXd &V) {
+template <typename MatrixType, typename OrderingType, int SuggestedBlockCols>
+void SparseBandedBlockedQR_General<MatrixType, OrderingType, SuggestedBlockCols>::yty_product_transposed(const MatrixXd &T, const MatrixXd &Y, MatrixXd &V) {
 	for (int j = 0; j < V.cols(); j++) {
 		V.col(j) += (Y * (T.transpose() * (Y.transpose() * V.col(j))));
 		//V.col(j) = (MatrixXd::Identity(Y.rows(), Y.rows()) - Y * T * Y.transpose()).transpose() * V.col(j);
@@ -527,13 +615,13 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::yty_
   *
   * \param mat The sparse column-major matrix
   */
-template <typename MatrixType, typename OrderingType, int MaxBlockRows>
-void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::factorize(const MatrixType& mat)
+template <typename MatrixType, typename OrderingType, int SuggestedBlockCols>
+void SparseBandedBlockedQR_General<MatrixType, OrderingType, SuggestedBlockCols>::factorize(const MatrixType& mat)
 {
 	// Not rank-revealing, column permutation is identity
 	m_outputPerm_c.setIdentity(mat.cols());
 
-	m_pmat = this->m_rowPerm * mat;
+	m_pmat = (this->m_rowPerm * mat);// *this->m_outputPerm_c;
 
 	typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrixType;
 
@@ -567,7 +655,7 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::fact
 		v.segment(1, houseqr.householderQ().essentialVector(0).rows()) = houseqr.householderQ().essentialVector(0);
 		Y.col(0) = v;
 		T(0, 0) = -houseqr.hCoeffs()(0);
-		for (int bc = 1; bc < bi.numCols; bc++) {
+		for (MatrixType::StorageIndex bc = 1; bc < bi.numCols; bc++) {
 			v.setZero();
 			v(bc) = 1.0;
 			v.segment(bc + 1, houseqr.householderQ().essentialVector(bc).rows()) = houseqr.householderQ().essentialVector(bc);
@@ -582,7 +670,7 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::fact
 		m_denseT.at(i) = T;
 		m_denseY.at(i) = Y;
 		Index diagIdx = bi.colIdx;
-		m_idxsY.at(i) = Vector4i(diagIdx, numZeros, activeRows, bi.numCols);
+		m_idxsY.at(i) = Matrix<MatrixType::StorageIndex, 4, 1>(diagIdx, numZeros, activeRows, bi.numCols);
 //		std::cout << "----\n" << m_idxsY.at(i) << std::endl;
 
 //		std::cout << "NNZ: " << numZeros << std::endl;
@@ -592,8 +680,8 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::fact
 
 		// Update sparse R with the rows solved in this step
 		int solvedRows = (i == numBlocks - 1) ? bi.numRows : this->m_blockMap.at(this->m_blockOrder.at(i + 1)).colIdx - bi.colIdx;
-		for (int br = 0; br < solvedRows; br++) {
-			for (int bc = 0; bc < bi.numCols; bc++) {
+		for (MatrixType::StorageIndex br = 0; br < solvedRows; br++) {
+			for (MatrixType::StorageIndex bc = 0; bc < bi.numCols; bc++) {
 				Rvals.add_if_nonzero(diagIdx + br, bi.colIdx + bc, V(br, bc));
 			}
 		}
@@ -610,7 +698,8 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, MaxBlockRows>::fact
 
 	//		std::cout << "--- V ---\n" << V.rightCols(4) << std::endl;
 	//		std::cout << "--- Ji ---\n" << Ji.rightCols(4) << std::endl;
-			Ji = m_pmat.block(bi.rowIdx + colIncrement, biNext.colIdx, activeRows, biNext.numCols).toDense();
+			MatrixType::StorageIndex numCols = (biNext.numCols >= blockOverlap) ? biNext.numCols : blockOverlap;
+			Ji = m_pmat.block(bi.rowIdx + colIncrement, biNext.colIdx, activeRows, numCols).toDense();
 	//		std::cout << "--- Jin ---\n" << Ji.rightCols(4) << std::endl;
 			if (blockOverlap > 0) {
 				Ji.block(0, 0, activeRows - biNext.numRows, blockOverlap) = V.block(colIncrement, colIncrement, activeRows - biNext.numRows, blockOverlap);
@@ -653,15 +742,16 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
   template<typename DesType>
   void evalTo(DesType& res) const
   {
-    Index m = m_qr.rows();
+	Index m = m_qr.rows();
     Index n = m_qr.cols();
 	res = m_other;
 
 	//clock_t begin = clock();
 
-	// FixMe: Better estimation of nonzeros?
-	Eigen::TripletArray<Scalar, typename MatrixType::Index> resVals(Index(res.rows() * res.cols() * 0.1));
-
+	Derived resTmp;
+	resTmp.resize(res.rows(), res.cols());
+	resTmp.reserve(res.rows() * res.cols() * 0.25);// FixMe: Better estimation of nonzeros?
+	
 	SparseVector resColJ;
 	VectorXd resColJd;
 	if (m_transpose)
@@ -671,7 +761,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 #ifdef MULTITHREADED
 		// Compute res = Q' * other column by column using parallel for loop
 		const size_t nloop = res.cols();
-		const size_t nthreads = std::thread::hardware_concurrency();
+		const size_t nthreads = 2;// std::thread::hardware_concurrency();
 		{
 			std::vector<std::thread> threads(nthreads);
 			std::mutex critical;
@@ -697,7 +787,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 									tmpResColJ.segment(m_qr.m_idxsY.at(k)(3), remaining) = resColJd.segment(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + m_qr.m_idxsY.at(k)(3), remaining);
 								}
 
-								tmpResColJ += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k).transpose() * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
+								tmpResColJ.noalias() += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k).transpose() * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
 
 								for (int i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
 									resColJd(m_qr.m_idxsY.at(k)(0) + i) = tmpResColJ(i);
@@ -710,8 +800,9 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 							std::lock_guard<std::mutex> lock(critical);
 							// Write the result back to j-th column of res
 							resColJ = resColJd.sparseView();
+							resTmp.startVec(j);
 							for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-								resVals.add(it.row(), j, it.value());
+								resTmp.insertBack(it.row(), j) = it.value();
 							}
 
 						}
@@ -729,25 +820,25 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 			for (Index k = 0; k < m_qr.m_denseY.size(); k++) {
 				tmpResColJ = VectorXd(m_qr.m_idxsY.at(k)(2));
 				tmpResColJ.segment(0, m_qr.m_idxsY.at(k)(3)) = resColJd.segment(m_qr.m_idxsY.at(k)(0), m_qr.m_idxsY.at(k)(3));
-				int remaining = m_qr.m_idxsY.at(k)(2) - m_qr.m_idxsY.at(k)(3);
+				MatrixType::StorageIndex remaining = m_qr.m_idxsY.at(k)(2) - m_qr.m_idxsY.at(k)(3);
 				if (remaining > 0) {
 					tmpResColJ.segment(m_qr.m_idxsY.at(k)(3), remaining) = resColJd.segment(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + m_qr.m_idxsY.at(k)(3), remaining);
 				}
 
-				tmpResColJ += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k).transpose() * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
+				tmpResColJ.noalias() += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k).transpose() * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
 
-				for (int i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
+				for (MatrixType::StorageIndex i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
 					resColJd(m_qr.m_idxsY.at(k)(0) + i) = tmpResColJ(i);
 				}
-				for (int i = m_qr.m_idxsY.at(k)(3); i < tmpResColJ.size(); i++) {
+				for (MatrixType::StorageIndex i = m_qr.m_idxsY.at(k)(3); i < tmpResColJ.size(); i++) {
 					resColJd(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + i) = tmpResColJ(i);
 				}
 			}
-
 			// Write the result back to j-th column of res
 			resColJ = resColJd.sparseView();
+			resTmp.startVec(j);
 			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-				resVals.add(it.row(), j, it.value());
+				resTmp.insertBack(it.row(), j) = it.value();
 			}
 		}
 #endif
@@ -759,7 +850,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 		// Compute res = Q * other column by column using parallel for loop
 #ifdef MULTITHREADED
 		const size_t nloop = res.cols();
-		const size_t nthreads = std::thread::hardware_concurrency();
+		const size_t nthreads = 2;// std::thread::hardware_concurrency();
 		{
 			std::vector<std::thread> threads(nthreads);
 			std::mutex critical;
@@ -785,7 +876,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 									tmpResColJ.segment(m_qr.m_idxsY.at(k)(3), remaining) = resColJd.segment(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + m_qr.m_idxsY.at(k)(3), remaining);
 								}
 
-								tmpResColJ += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k) * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
+								tmpResColJ.noalias() += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k) * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
 
 								for (int i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
 									resColJd(m_qr.m_idxsY.at(k)(0) + i) = tmpResColJ(i);
@@ -798,8 +889,9 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 							std::lock_guard<std::mutex> lock(critical);
 							// Write the result back to j-th column of res
 							resColJ = resColJd.sparseView();
+							resTmp.startVec(j);
 							for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-								resVals.add(it.row(), j, it.value());
+								resTmp.insertBack(it.row(), j) = it.value();
 							}
 
 						}
@@ -809,6 +901,49 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 			std::for_each(threads.begin(), threads.end(), [](std::thread& x) {x.join(); });
 		}
 #else
+
+		/*
+		begin = clock();
+		// Compute res = Q * other column by column
+		std::vector<int> col_nonzeros(res.cols());
+		for (Index j = 0; j < res.cols(); j++) {
+			// Use temporary vector resColJ inside of the for loop - faster access
+			Vector<bool> tmpResColOccupied(res.rows());
+			for (Index k = m_qr.m_denseY.size() - 1; k >= 0; k--) {
+				int colstart = m_qr.m_idxsY.at(k)(0);
+				int numzeros = m_qr.m_idxsY.at(k)(1);
+				int activerows = m_qr.m_idxsY.at(k)(2);
+				int ncols = m_qr.m_idxsY.at(k)(3);
+
+
+				tmpResColJ.segment(0, m_qr.m_idxsY.at(k)(3)) = resColJd.segment(m_qr.m_idxsY.at(k)(0), m_qr.m_idxsY.at(k)(3));
+				MatrixType::StorageIndex remaining = m_qr.m_idxsY.at(k)(2) - m_qr.m_idxsY.at(k)(3);
+				if (remaining > 0) {
+					tmpResColJ.segment(m_qr.m_idxsY.at(k)(3), remaining) = resColJd.segment(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + m_qr.m_idxsY.at(k)(3), remaining);
+				}
+
+				// We can afford noalias() in this case
+				tmpResColOccupied.segment(colstart;
+
+				for (MatrixType::StorageIndex i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
+					resColJd(m_qr.m_idxsY.at(k)(0) + i) = tmpResColJ(i);
+				}
+				for (MatrixType::StorageIndex i = m_qr.m_idxsY.at(k)(3); i < tmpResColJ.size(); i++) {
+					resColJd(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + i) = tmpResColJ(i);
+				}
+			}
+
+			// Write the result back to j-th column of res
+			resColJ = resColJd.sparseView();
+			resTmp.startVec(j);
+			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+				resTmp.insertBack(it.row(), j) = it.value();
+			}
+		}
+		std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+		*/
+
+		//begin = clock();
 		// Compute res = Q * other column by column
 		VectorXd tmpResColJ;
 		for (Index j = 0; j < res.cols(); j++) {
@@ -817,34 +952,38 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 			for (Index k = m_qr.m_denseY.size() - 1; k >= 0; k--) {
 				tmpResColJ = VectorXd(m_qr.m_idxsY.at(k)(2));
 				tmpResColJ.segment(0, m_qr.m_idxsY.at(k)(3)) = resColJd.segment(m_qr.m_idxsY.at(k)(0), m_qr.m_idxsY.at(k)(3));
-				int remaining = m_qr.m_idxsY.at(k)(2) - m_qr.m_idxsY.at(k)(3);
+				MatrixType::StorageIndex remaining = m_qr.m_idxsY.at(k)(2) - m_qr.m_idxsY.at(k)(3);
 				if (remaining > 0) {
 					tmpResColJ.segment(m_qr.m_idxsY.at(k)(3), remaining) = resColJd.segment(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + m_qr.m_idxsY.at(k)(3), remaining);
 				}
 
-				tmpResColJ += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k) * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
-
-				for (int i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
+				// We can afford noalias() in this case
+				tmpResColJ.noalias() += (m_qr.m_denseY.at(k) * (m_qr.m_denseT.at(k) * (m_qr.m_denseY.at(k).transpose() * tmpResColJ)));
+				
+				for (MatrixType::StorageIndex i = 0; i < m_qr.m_idxsY.at(k)(3); i++) {
 					resColJd(m_qr.m_idxsY.at(k)(0) + i) = tmpResColJ(i);
 				}
-				for (int i = m_qr.m_idxsY.at(k)(3); i < tmpResColJ.size(); i++) {
+				for (MatrixType::StorageIndex i = m_qr.m_idxsY.at(k)(3); i < tmpResColJ.size(); i++) {
 					resColJd(m_qr.m_idxsY.at(k)(0) + m_qr.m_idxsY.at(k)(1) + i) = tmpResColJ(i);
 				}
 			}
-
+			
 			// Write the result back to j-th column of res
 			resColJ = resColJd.sparseView();
+			resTmp.startVec(j);
 			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-				resVals.add(it.row(), j, it.value());
+				resTmp.insertBack(it.row(), j) = it.value();
 			}
 		}
+		//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+
 #endif
     }
 
-	res.setFromTriplets(resVals.begin(), resVals.end());
-	res.makeCompressed();
-
-	//std::cout << "Elapsed: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	resTmp.finalize();
+	// Assign the output
+	res = resTmp;
   }
   const SparseBandedBlockedQR_GeneralType& m_qr;
   const Derived& m_other;
