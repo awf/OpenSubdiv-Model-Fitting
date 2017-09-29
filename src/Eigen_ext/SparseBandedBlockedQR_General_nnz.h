@@ -857,43 +857,21 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 		VectorXd resColJd;
 		VectorXd tmpResColJ;
 		VectorXi resColJdNnz, tmpResColNnz;
+
+		/***
+		 * nonzero counting try
+		**/
+
 		std::set<int> vecNnzs;
 		for (Index j = 0; j < res.cols(); j++) {
-			// Use temporary vector resColJ inside of the for loop - faster access
-			/*resColJdNnz = VectorXi::Zero(res.col(j).size());
-			for (MatrixType::InnerIterator it(res, j); it; ++it) {
-				resColJdNnz(it.row()) = it.value();
-			}*/
+			// Initialize std::set of nonzeros for the current column
 			vecNnzs.clear();
 			for (MatrixType::InnerIterator it(res, j); it; ++it) {
 				vecNnzs.insert(it.row());
 			}
 			for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-				/*
-				tmpResColNnz = VectorXi(m_qr.m_blocksYT[k].value.rows());
-				tmpResColNnz.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJdNnz.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-				MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-				if (remaining > 0) {
-					tmpResColNnz.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJdNnz.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
-				}*/
-
-				// We can afford noalias() in this case
 				m_qr.m_blocksYT[k].value.multNnzSp2(vecNnzs);
-				//m_qr.m_blocksYT[k].value.multNnzSp<SparseVector>(resColJ, m_qr.m_blocksYT[k].row);
-				//tmpResColNnz += m_qr.m_blocksYT[k].value.multNnz(tmpResColNnz);
-				/*
-				resColJdNnz.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColNnz.segment(0, m_qr.m_blocksYT[k].value.cols());
-				resColJdNnz.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColNnz.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
-				*/
 			}
-			//std::cout << "NNZs: \n" << (tmpResColJ.unaryExpr([](double x) { return std::abs(x) > 1e-16; })) << std::endl;
-
-			// Write the result back to j-th column of res
-			/*resColJ = resColJd.sparseView();
-			resTmp.startVec(j);
-			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-				resTmp.insertBack(it.row(), j) = it.value();
-			}*/
 		}
 		//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 

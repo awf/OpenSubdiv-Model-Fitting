@@ -15,8 +15,9 @@ public:
 
 		this->nnz_matY = this->matY.cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
 		this->nnz_matT = this->matT.cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
+		// Precomptue this for nnz counting (doesn't cost almost anything)
 		this->matYTY = (this->matY * (this->matT * (this->matY.transpose()))).cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
-
+		// Store sets of nonzeros indices in YTY product matrix
 		for (int c = 0; c < this->matYTY.cols(); c++) {
 			std::set<int> rowNnzs;
 			for (int r = 0; r < this->matYTY.rows(); r++) {
@@ -31,7 +32,7 @@ public:
 			nnzSets.push_back(rowNnzs);
 
 		}
-
+		// Store indices of rows affected by this YTY
 		for (int r = 0; r < this->matYTY.rows(); r++) {
 			if (r < this->matYTY.cols()) {
 				rowIdxs.push_back(rowStart + r);
@@ -73,6 +74,9 @@ public:
 	Eigen::VectorXd multTransposed(const Eigen::VectorXd &other) const {
 		return (this->matY * (this->matT.transpose() * (this->matY.transpose() * other)));
 	}
+	/*
+	* 1) Unfinished nonzero cunting try using dense vector ...
+	*/
 	Eigen::VectorXi multNnz(const Eigen::VectorXi &other) const {
 		Eigen::VectorXi nnz(other.size());
 		for (int i = 0; i < other.size(); i++) {
@@ -81,6 +85,9 @@ public:
 		return nnz;
 		//return (this->nnz_matY * (this->nnz_matT * (this->nnz_matY.transpose() * other)));
 	}
+	/*
+	* 2) Nonzero counting try using sparse vector and iterators
+	*/
 	template <typename SparseVector>
 	Eigen::VectorXi multNnzSp(SparseVector &other, const int rowIdx) const {
 		Eigen::VectorXi nnz(other.size());
@@ -104,6 +111,9 @@ public:
 		}
 		return Eigen::VectorXi();
 	}
+	/*
+	* 3) Nonzero counting try using std::set
+	*/
 	void multNnzSp2(std::set<int> &vecNnzs) const {
 		std::vector<int> res;
 		std::vector<int> isect(rowIdxs.size());
