@@ -45,7 +45,7 @@ int main() {
 	std::default_random_engine gen;
 	std::uniform_real_distribution<double> dist(0.5, 5.0);
 
-	Eigen::Index numVars = 1024;
+	Eigen::Index numVars = 1024; 
 	Eigen::Index numParams = numVars * 2;
 	Eigen::Index numResiduals = numVars * 3 + numVars + numVars * 3;
 
@@ -145,8 +145,11 @@ int main() {
 //	Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ_perm.csv");
 //#endif
 	//*/
+
 	std::cout << "Problem size (r x c): " << spJ.rows() << " x " << spJ.cols() << std::endl;
 	std::cout << "####################################################" << std::endl;
+
+	int nVecEvals = 1000;
 
 	/*
 	 * Solve the problem using SuiteSparse QR.
@@ -161,14 +164,12 @@ int main() {
 	std::cout << "Express full Q: " << std::endl;
 	begin = clock();
 	SPQRSolver::MatrixType QSP(spJ.rows(), spJ.rows());
-	QSP.setIdentity();
-	QSP = spqr.matrixQ() * QSP;
+	QSP = spqr.matrixQ() * I;
 	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	begin = clock();
 	SPQRSolver::MatrixType QtSP(spJ.rows(), spJ.rows());
-	QtSP.setIdentity();
-	QtSP = spqr.matrixQ().transpose() * QtSP;
+	QtSP = spqr.matrixQ().transpose() * I;
 	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	std::cout << "Solve LS: " << std::endl;
@@ -178,7 +179,6 @@ int main() {
 			slvrVecSP.coeffRef(i, j) = dist(gen);
 		}
 	}
-	int nVecEvals = 1000;
 	begin = clock();
 	JacobianType resSP;
 	for(int i = 0; i < nVecEvals; i++) {
@@ -209,7 +209,9 @@ int main() {
 	std::cout << "Solver: General Banded Blocked QR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	BandedBlockedQRSolver slvr;
+
 	/*
+	// Only analyze pattern test
 	slvr.analyzePattern(spJ);
 
 	Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ_perm_input.csv");
@@ -221,30 +223,24 @@ int main() {
 	return 0;
 	*/
 
-	//Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ_perm_input.csv");
 	begin = clock();
 	slvr.compute(spJ);
 	std::cout << "Factorization:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 	spJ = slvr.rowsPermutation() * spJ;
-	//Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ_perm_rowonly.csv");
-
-	//Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ_perm_output.csv");
-	//spJ = spJ * slvr.colsPermutation();
-	//return 0;
+	
 	std::cout << "Express full Q: " << std::endl;
 	begin = clock();
 	JacobianType slvrQ(spJ.rows(), spJ.rows());
-	slvrQ.setIdentity();
-	slvrQ = slvr.matrixQ() * slvrQ;
+	slvrQ = slvr.matrixQ() * I;
 	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	begin = clock();
 	JacobianType slvrQt(spJ.rows(), spJ.rows());
-	slvrQt.setIdentity();
-	slvrQt = slvr.matrixQ().transpose() * slvrQt;
+	slvrQt = slvr.matrixQ().transpose() * I;
 	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
 	std::cout << "Solve LS: " << std::endl;
+	Eigen::VectorXd slvrVecDense = Eigen::VectorXd::Random(spJ.rows());
 	JacobianType slvrVec(spJ.rows(), 1);
 	for (int i = 0; i < slvrVec.rows(); i++) {
 		for (int j = 0; j < slvrVec.cols(); j++) {
@@ -252,17 +248,16 @@ int main() {
 		}
 	}
 	begin = clock();
-	JacobianType res;
+	Eigen::VectorXd slvrResDense;
 	for(int i = 0; i < nVecEvals; i++) {
-		res = slvr.matrixQ() * slvrVec;
+		slvrResDense = slvr.matrixQ() * slvrVecDense;//slvrVec;
 	}
 	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
 
 	begin = clock();
-	VectorXd resDense = res.toDense();
 	VectorXd solved;
 	for (int i = 0; i < nVecEvals; i++) {
-		solved = slvr.matrixR().template triangularView<Upper>().solve(resDense);
+		solved = slvr.matrixR().template triangularView<Upper>().solve(slvrResDense);
 	}
 	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
 

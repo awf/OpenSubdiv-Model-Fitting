@@ -628,19 +628,18 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
   {
 	  Index m = m_qr.rows();
 	  Index n = m_qr.cols();
-	  res = m_other;
 
 	  clock_t begin = clock();
 
 #ifdef MULTITHREADED
 
-	  std::vector<std::vector<std::pair<typename MatrixType::Index, Scalar>>> resVals(res.cols());
+	  std::vector<std::vector<std::pair<typename MatrixType::Index, Scalar>>> resVals(m_other.cols());
 	  Index numNonZeros = 0;
 
 	  if (m_transpose)
 	  {
 		  // Compute res = Q' * other column by column using parallel for loop
-		  const size_t nloop = res.cols();
+		  const size_t nloop = m_other.cols();
 		  const size_t nthreads = std::thread::hardware_concurrency();
 		  {
 			  std::vector<std::thread> threads(nthreads);
@@ -658,7 +657,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 							  VectorXd tmpResColJ;
 							  SparseVector resColJ;
 							  VectorXd resColJd;
-							  resColJd = res.col(j).toDense();
+							  resColJd = m_other.col(j).toDense();
 							  for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
 								  MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 								  FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
@@ -675,7 +674,6 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 							  numNonZeros += resColJ.nonZeros();
 							  resVals[j].reserve(resColJ.nonZeros());
 							  for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-								  //resVals.add(it.row(), j, it.value());
 								  resVals[j].push_back(std::make_pair(it.row(), it.value()));
 							  }
 
@@ -687,7 +685,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 		  }
 	  }
 	  else {
-		  const size_t nloop = res.cols();
+		  const size_t nloop = m_other.cols();
 		  const size_t nthreads = std::thread::hardware_concurrency();
 		  {
 			  std::vector<std::thread> threads(nthreads);
@@ -705,7 +703,7 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 							  VectorXd tmpResColJ;
 							  SparseVector resColJ;
 							  VectorXd resColJd;
-							  resColJd = res.col(j).toDense();
+							  resColJd = m_other.col(j).toDense();
 							  for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
 								  MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 								  FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
@@ -722,7 +720,6 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 							  numNonZeros += resColJ.nonZeros();
 							  resVals[j].reserve(resColJ.nonZeros());
 							  for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-								  //resVals.add(it.row(), j, it.value());
 								  resVals[j].push_back(std::make_pair(it.row(), it.value()));
 							  }
 
@@ -734,26 +731,21 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 		  }
 		
 		}
-//	  begin = clock();
 
-		  Derived resTmp;
-		  resTmp.resize(res.rows(), res.cols());
-		  resTmp.reserve(numNonZeros);
-		  for (int j = 0; j < resVals.size(); j++) {
-			  resTmp.startVec(j);
-			  for (auto it = resVals[j].begin(); it != resVals[j].end(); ++it) {
-				  resTmp.insertBack(it->first, j) = it->second;
-			  }
-		  }
-		  resTmp.finalize();
-	
-		  res = resTmp;
+		// Form the output
+		res = Derived(m_other.rows(), m_other.cols());
+		res.reserve(numNonZeros);
+		for (int j = 0; j < resVals.size(); j++) {
+			res.startVec(j);
+			for (auto it = resVals[j].begin(); it != resVals[j].end(); ++it) {
+				res.insertBack(it->first, j) = it->second;
+			}
+		}
+		res.finalize();
 
-	//	std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 #else
-		Derived resTmp;
-		resTmp.resize(res.rows(), res.cols());
-		resTmp.reserve(res.rows() * res.cols() * 0.25);// FixMe: Better estimation of nonzeros?
+		res = Derived(m_other.rows(), m_other.cols());
+		res.reserve(m_other.rows() * m_other.cols() * 0.25);// FixMe: Better estimation of nonzeros?
 
 		if (m_transpose)
 		{
@@ -761,9 +753,9 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 			SparseVector resColJ;
 			VectorXd resColJd;
 			VectorXd tmpResColJ;
-			for (Index j = 0; j < res.cols(); j++) {
+			for (Index j = 0; j < m_other.cols(); j++) {
 				// Use temporary vector resColJ inside of the for loop - faster access
-				resColJd = res.col(j).toDense();
+				resColJd = m_other.col(j).toDense();
 				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
 					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 					FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
@@ -775,22 +767,20 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 				}
 				// Write the result back to j-th column of res
 				resColJ = resColJd.sparseView();
-				resTmp.startVec(j);
+				res.startVec(j);
 				for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-					resTmp.insertBack(it.row(), j) = it.value();
+					res.insertBack(it.row(), j) = it.value();
 				}
 			}
 		}
 		else
 		{
-			// Compute res = Q * other column by column using parallel for loop
-			//begin = clock();
 			// Compute res = Q * other column by column
 			SparseVector resColJ;
 			VectorXd resColJd;
 			VectorXd tmpResColJ;
-			for (Index j = 0; j < res.cols(); j++) {
-				resColJd = res.col(j).toDense();
+			for (Index j = 0; j < m_other.cols(); j++) {
+				resColJd = m_other.col(j).toDense();
 				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
 					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 					FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
@@ -803,16 +793,15 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 
 				// Write the result back to j-th column of res
 				resColJ = resColJd.sparseView();
-				resTmp.startVec(j);
+				res.startVec(j);
 				for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-					resTmp.insertBack(it.row(), j) = it.value();
+					res.insertBack(it.row(), j) = it.value();
 				}
 			}
 		}
-		//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-		resTmp.finalize();
-		// Assign the output
-		res = resTmp;
+
+		// Don't forget to call finalize
+		res.finalize();
 
 #endif
 
