@@ -15,7 +15,6 @@
 #include <shared_mutex>
 #include <condition_variable>
 #include "SparseBlockCOO.h"
-//#include "SparseBlockCOO_nnz.h"
 #include <chrono>
 using namespace std::chrono_literals;
 
@@ -552,11 +551,8 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, SuggestedBlockCols>
 		* Save current Y and T. Can be saved separately as upper (diagoal) part of Y & T and lower (off-diagonal) part of Y & Y
 		*/
 		Index diagIdx = bi.colIdx;
-		//m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y, T, numZeros, diagIdx)));
 		m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y, T, numZeros)));
-		//m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y.topRows(Y.cols()), T)));
-		//m_blocksYT.insert(SparseBlockYTY::Element(diagIdx + numZeros, diagIdx, BlockYTY<StorageIndex>(Y.bottomRows(Y.rows() - Y.cols()), T)));
-
+		
 		// Get the R part of the dense QR decomposition 
 		MatrixXd V = houseqr.matrixQR().template triangularView<Upper>();
 
@@ -788,22 +784,6 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 		else
 		{
 			// Compute res = Q * other column by column using parallel for loop
-
-			/*
-			std::set<int> vecNnzs;
-			for (Index j = 0; j < res.cols(); j++) {
-				// Initialize std::set of nonzeros for the current column
-				vecNnzs.clear();
-				for (MatrixType::InnerIterator it(res, j); it; ++it) {
-					vecNnzs.insert(it.row());
-				}
-				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-					m_qr.m_blocksYT[k].value.multNnzSp2(vecNnzs);
-				}
-			}
-			std::cout << vecNnzs.size() << std::endl;
-			*/
-
 			//begin = clock();
 			// Compute res = Q * other column by column
 			SparseVector resColJ;
