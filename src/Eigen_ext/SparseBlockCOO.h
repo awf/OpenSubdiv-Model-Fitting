@@ -40,7 +40,7 @@ public:
 	Eigen::VectorXd multTransposed(const Eigen::VectorXd &other) const {
 		return (this->matY * (this->matT.transpose() * (this->matY.transpose() * other)));
 	}
-
+	
 	Eigen::VectorXd operator*(const Eigen::VectorXd &other) const {
 		return (this->matY * (this->matT * (this->matY.transpose() * other)));
 	}
