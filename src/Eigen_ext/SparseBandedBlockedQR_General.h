@@ -15,6 +15,7 @@
 #include <shared_mutex>
 #include <condition_variable>
 #include "SparseBlockCOO.h"
+//#include "SparseBlockCOO_nnz.h"
 #include <chrono>
 using namespace std::chrono_literals;
 
@@ -551,6 +552,7 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, SuggestedBlockCols>
 		* Save current Y and T. Can be saved separately as upper (diagoal) part of Y & T and lower (off-diagonal) part of Y & Y
 		*/
 		Index diagIdx = bi.colIdx;
+		//m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y, T, numZeros, diagIdx)));
 		m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y, T, numZeros)));
 		//m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y.topRows(Y.cols()), T)));
 		//m_blocksYT.insert(SparseBlockYTY::Element(diagIdx + numZeros, diagIdx, BlockYTY<StorageIndex>(Y.bottomRows(Y.rows() - Y.cols()), T)));
@@ -597,6 +599,18 @@ void SparseBandedBlockedQR_General<MatrixType, OrderingType, SuggestedBlockCols>
 
 //#define MULTITHREADED 1
 
+#define FULL_TO_BLOCK_VEC(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
+	blockVec = VectorXd(yRows); \
+	blockVec.segment(0, yCols) = fullVec.segment(blockRowIdx, yCols); \
+	if(numSubdiagElems > 0) { \
+		blockVec.segment(yCols, numSubdiagElems) = fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems); \
+	} 
+
+#define BLOCK_VEC_TO_FULL(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
+	fullVec.segment(blockRowIdx, yCols) = blockVec.segment(0, yCols); \
+	fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems) = blockVec.segment(yCols, numSubdiagElems);
+
+
 // xxawf boilerplate all this into BlockSparseBandedBlockedQR_General...
 template <typename SparseBandedBlockedQR_GeneralType, typename Derived>
 struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType, Derived> >
@@ -616,12 +630,131 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
   template<typename DesType>
   void evalTo(DesType& res) const
   {
-		Index m = m_qr.rows();
-		Index n = m_qr.cols();
-		res = m_other;
+	  Index m = m_qr.rows();
+	  Index n = m_qr.cols();
+	  res = m_other;
 
-		clock_t begin = clock();
+	  clock_t begin = clock();
 
+#ifdef MULTITHREADED
+
+	  std::vector<std::vector<std::pair<typename MatrixType::Index, Scalar>>> resVals(res.cols());
+	  Index numNonZeros = 0;
+
+	  if (m_transpose)
+	  {
+		  // Compute res = Q' * other column by column using parallel for loop
+		  const size_t nloop = res.cols();
+		  const size_t nthreads = std::thread::hardware_concurrency();
+		  {
+			  std::vector<std::thread> threads(nthreads);
+			  std::mutex critical;
+			  for (int t = 0; t<nthreads; t++)
+			  {
+				  threads[t] = std::thread(std::bind(
+					  [&](const int bi, const int ei, const int t)
+				  {
+					  // loop over all items
+					  for (int j = bi; j<ei; j++)
+					  {
+						  // inner loop
+						  {
+							  VectorXd tmpResColJ;
+							  SparseVector resColJ;
+							  VectorXd resColJd;
+							  resColJd = res.col(j).toDense();
+							  for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
+								  MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+								  FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
+
+								  // We can afford noalias() in this case
+								  tmpResColJ.noalias() += m_qr.m_blocksYT[k].value.multTransposed(tmpResColJ);
+
+								  BLOCK_VEC_TO_FULL(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
+							  }
+
+							  std::lock_guard<std::mutex> lock(critical);
+							  // Write the result back to j-th column of res
+							  resColJ = resColJd.sparseView();
+							  numNonZeros += resColJ.nonZeros();
+							  resVals[j].reserve(resColJ.nonZeros());
+							  for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+								  //resVals.add(it.row(), j, it.value());
+								  resVals[j].push_back(std::make_pair(it.row(), it.value()));
+							  }
+
+						  }
+					  }
+				  }, t*nloop / nthreads, (t + 1) == nthreads ? nloop : (t + 1)*nloop / nthreads, t));
+			  }
+			  std::for_each(threads.begin(), threads.end(), [](std::thread& x) {x.join(); });
+		  }
+	  }
+	  else {
+		  const size_t nloop = res.cols();
+		  const size_t nthreads = std::thread::hardware_concurrency();
+		  {
+			  std::vector<std::thread> threads(nthreads);
+			  std::mutex critical;
+			  for (int t = 0; t < nthreads; t++)
+			  {
+				  threads[t] = std::thread(std::bind(
+					  [&](const int bi, const int ei, const int t)
+				  {
+					  // loop over all items
+					  for (int j = bi; j < ei; j++)
+					  {
+						  // inner loop
+						  {
+							  VectorXd tmpResColJ;
+							  SparseVector resColJ;
+							  VectorXd resColJd;
+							  resColJd = res.col(j).toDense();
+							  for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
+								  MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+								  FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
+							
+								  // We can afford noalias() in this case
+								  tmpResColJ.noalias() += m_qr.m_blocksYT[k].value * tmpResColJ;
+								 
+								  BLOCK_VEC_TO_FULL(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
+							  }
+
+							  std::lock_guard<std::mutex> lock(critical);
+							  // Write the result back to j-th column of res
+							  resColJ = resColJd.sparseView();
+							  numNonZeros += resColJ.nonZeros();
+							  resVals[j].reserve(resColJ.nonZeros());
+							  for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+								  //resVals.add(it.row(), j, it.value());
+								  resVals[j].push_back(std::make_pair(it.row(), it.value()));
+							  }
+
+						  }
+					  }
+				  }, t*nloop / nthreads, (t + 1) == nthreads ? nloop : (t + 1)*nloop / nthreads, t));
+			  }
+			  std::for_each(threads.begin(), threads.end(), [](std::thread& x) {x.join(); });
+		  }
+		
+		}
+//	  begin = clock();
+
+		  Derived resTmp;
+		  resTmp.resize(res.rows(), res.cols());
+		  resTmp.reserve(numNonZeros);
+		  for (int j = 0; j < resVals.size(); j++) {
+			  resTmp.startVec(j);
+			  for (auto it = resVals[j].begin(); it != resVals[j].end(); ++it) {
+				  resTmp.insertBack(it->first, j) = it->second;
+			  }
+		  }
+		  resTmp.finalize();
+	
+		  res = resTmp;
+
+	//	std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+#else
 		Derived resTmp;
 		resTmp.resize(res.rows(), res.cols());
 		resTmp.reserve(res.rows() * res.cols() * 0.25);// FixMe: Better estimation of nonzeros?
@@ -636,18 +769,13 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 				// Use temporary vector resColJ inside of the for loop - faster access
 				resColJd = res.col(j).toDense();
 				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-					tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
-					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-					if (remaining > 0) {
-						tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
-					}
+					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 
 					// We can afford noalias() in this case
 					tmpResColJ.noalias() += m_qr.m_blocksYT[k].value.multTransposed(tmpResColJ);
-
-					resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
-					resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
+					
+					BLOCK_VEC_TO_FULL(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 				}
 				// Write the result back to j-th column of res
 				resColJ = resColJd.sparseView();
@@ -661,6 +789,21 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 		{
 			// Compute res = Q * other column by column using parallel for loop
 
+			/*
+			std::set<int> vecNnzs;
+			for (Index j = 0; j < res.cols(); j++) {
+				// Initialize std::set of nonzeros for the current column
+				vecNnzs.clear();
+				for (MatrixType::InnerIterator it(res, j); it; ++it) {
+					vecNnzs.insert(it.row());
+				}
+				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
+					m_qr.m_blocksYT[k].value.multNnzSp2(vecNnzs);
+				}
+			}
+			std::cout << vecNnzs.size() << std::endl;
+			*/
+
 			//begin = clock();
 			// Compute res = Q * other column by column
 			SparseVector resColJ;
@@ -669,18 +812,13 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 			for (Index j = 0; j < res.cols(); j++) {
 				resColJd = res.col(j).toDense();
 				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-					tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
-					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-					if (remaining > 0) {
-						tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
-					}
+					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 
 					// We can afford noalias() in this case
 					tmpResColJ.noalias() += m_qr.m_blocksYT[k].value * tmpResColJ;
-
-					resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
-					resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
+					
+					BLOCK_VEC_TO_FULL(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 				}
 
 				// Write the result back to j-th column of res
@@ -691,11 +829,13 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 				}
 			}
 		}
-
 		//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 		resTmp.finalize();
 		// Assign the output
 		res = resTmp;
+
+#endif
+
 	}
 
   const SparseBandedBlockedQR_GeneralType& m_qr;
@@ -736,18 +876,13 @@ struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType,
 				// Use temporary vector resColJ inside of the for loop - faster access
 				resColJd = res.col(j);
 				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-					tmpResColJ = VectorX(m_qr.m_blocksYT[k].value.rows());
-					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-					if (remaining > 0) {
-						tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
-					}
-
+					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
+					
 					// We can afford noalias() in this case
 					tmpResColJ.noalias() += m_qr.m_blocksYT[k].value.multTransposed(tmpResColJ);
 
-					resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
-					resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
+					BLOCK_VEC_TO_FULL(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 				}
 
 				resTmp.col(j) = resColJd;
@@ -762,18 +897,13 @@ struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType,
 			for (Index j = 0; j < res.cols(); j++) {
 				resColJd = res.col(j);
 				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-					tmpResColJ = VectorX(m_qr.m_blocksYT[k].value.rows());
-					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-					if (remaining > 0) {
-						tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
-					}
+					MatrixType::StorageIndex subdiagElems = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					FULL_TO_BLOCK_VEC(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 
 					// We can afford noalias() in this case
 					tmpResColJ.noalias() += m_qr.m_blocksYT[k].value * tmpResColJ;
 
-					resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
-					resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
+					BLOCK_VEC_TO_FULL(resColJd, tmpResColJ, m_qr.m_blocksYT[k].value.rows(), m_qr.m_blocksYT[k].value.cols(), m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.numZeros(), subdiagElems)
 				}
 
 				resTmp.col(j) = resColJd;

@@ -9,7 +9,7 @@ public:
 	BlockYTY() {
 	}
 
-	BlockYTY(const Eigen::MatrixXd &Y, const Eigen::MatrixXd &T, const IndexType numZeros)  
+	BlockYTY(const Eigen::MatrixXd &Y, const Eigen::MatrixXd &T, const IndexType numZeros)
 		: matY(Y), matT(T), nzrs(numZeros) {
 	}
 
