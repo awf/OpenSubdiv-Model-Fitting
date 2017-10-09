@@ -16,25 +16,29 @@ public:
 		this->nnz_matY = this->matY.cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
 		this->nnz_matT = this->matT.cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
 		// Precomptue this for nnz counting (doesn't cost almost anything)
-		this->matYTY = (this->matY * (this->matT * (this->matY.transpose()))).cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
+		this->matYTY = (this->matY * (this->matT * (this->matY.transpose())));//.cast<int>().unaryExpr([](double x) {return int(std::abs(x) > 0); });
 		// Store sets of nonzeros indices in YTY product matrix
-		for (int c = 0; c < this->matYTY.cols(); c++) {
+		for (int r = 0; r < this->matYTY.rows(); r++) {
 			std::set<int> rowNnzs;
-			for (int r = 0; r < this->matYTY.rows(); r++) {
+			for (int c = 0; c < this->matYTY.cols(); c++) {
 				if (std::abs(this->matYTY(r, c)) > 0) {
-					if (r < this->matYTY.cols()) {
+					if (r < this->matY.cols()) {
+						//std::cout << rowStart +  r << ", ";
 						rowNnzs.insert(rowStart + r);
 					} else {
+						//std::cout << rowStart + this->matYTY.cols() + numZeros + r << ", ";
 						rowNnzs.insert(rowStart + this->matYTY.cols() + numZeros + r);
 					}
+
 				}
 			}
+			//std::cout << "---" << std::endl;
 			nnzSets.push_back(rowNnzs);
 
 		}
 		// Store indices of rows affected by this YTY
 		for (int r = 0; r < this->matYTY.rows(); r++) {
-			if (r < this->matYTY.cols()) {
+			if (r < this->matY.cols()) {
 				rowIdxs.push_back(rowStart + r);
 			}
 			else {
@@ -118,14 +122,30 @@ public:
 		std::vector<int> res;
 		std::vector<int> isect(rowIdxs.size());
 		for (int i = 0; i < rowIdxs.size(); i++) {
+			/*
+			for (auto it = nnzSets[i].begin(); it != nnzSets[i].end(); ++it) {
+				std::cout << *it << ", ";
+			}
+			std::cout << std::endl;
+			for (auto it = vecNnzs.begin(); it != vecNnzs.end(); ++it) {
+				std::cout << *it << "; ";
+			}
+			std::cout << std::endl;
+			*/
 			if (std::set_intersection(nnzSets[i].begin(), nnzSets[i].end(), vecNnzs.begin(), vecNnzs.end(), isect.begin()) != isect.begin()) {
-				res.push_back(rowIdxs[i]);
+				// We know that the dot product will be nonzero
+				for (int i = 0; i < rowIdxs.size(); i++) {
+					vecNnzs.insert(rowIdxs[i]);
+				}
+				return;
+				//res.push_back(rowIdxs[i]);
+				//break;
 			}
 		}
-
+		/*
 		for (int i = 0; i < res.size(); i++) {
 			vecNnzs.insert(res[i]);
-		}
+		}*/
 	}
 
 	Eigen::VectorXd operator*(const Eigen::VectorXd &other) const {
@@ -135,7 +155,7 @@ public:
 private:
 	Eigen::MatrixXd matY;
 	Eigen::MatrixXd matT;
-	Eigen::MatrixXi matYTY;
+	Eigen::MatrixXd matYTY;
 	Eigen::MatrixXi nnz_matY;
 	Eigen::MatrixXi nnz_matT;
 	//std::vector<std::vector<int> > ytyNNzIdxs;
