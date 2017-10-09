@@ -616,87 +616,86 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
   template<typename DesType>
   void evalTo(DesType& res) const
   {
-	Index m = m_qr.rows();
-    Index n = m_qr.cols();
-	res = m_other;
+		Index m = m_qr.rows();
+		Index n = m_qr.cols();
+		res = m_other;
 
-	clock_t begin = clock();
+		clock_t begin = clock();
 
-	Derived resTmp;
-	resTmp.resize(res.rows(), res.cols());
-	resTmp.reserve(res.rows() * res.cols() * 0.25);// FixMe: Better estimation of nonzeros?
-	//resTmp.reserve(1);
+		Derived resTmp;
+		resTmp.resize(res.rows(), res.cols());
+		resTmp.reserve(res.rows() * res.cols() * 0.25);// FixMe: Better estimation of nonzeros?
 
-	if (m_transpose)
-	{
-		//Compute res = Q' * other column by column
-		SparseVector resColJ;
-		VectorXd resColJd;
-		VectorXd tmpResColJ;
-		for (Index j = 0; j < res.cols(); j++) {
-			// Use temporary vector resColJ inside of the for loop - faster access
-			resColJd = res.col(j).toDense();
-			for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-				tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
-				tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-				MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-				if (remaining > 0) {
-					tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
+		if (m_transpose)
+		{
+			//Compute res = Q' * other column by column
+			SparseVector resColJ;
+			VectorXd resColJd;
+			VectorXd tmpResColJ;
+			for (Index j = 0; j < res.cols(); j++) {
+				// Use temporary vector resColJ inside of the for loop - faster access
+				resColJd = res.col(j).toDense();
+				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
+					tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
+					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
+					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					if (remaining > 0) {
+						tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
+					}
+
+					// We can afford noalias() in this case
+					tmpResColJ.noalias() += m_qr.m_blocksYT[k].value.multTransposed(tmpResColJ);
+
+					resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
+					resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
 				}
-
-				// We can afford noalias() in this case
-				tmpResColJ.noalias() += m_qr.m_blocksYT[k].value.multTransposed(tmpResColJ);
-
-				resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
-				resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
-			}
-			// Write the result back to j-th column of res
-			resColJ = resColJd.sparseView();
-			resTmp.startVec(j);
-			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-				resTmp.insertBack(it.row(), j) = it.value();
+				// Write the result back to j-th column of res
+				resColJ = resColJd.sparseView();
+				resTmp.startVec(j);
+				for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+					resTmp.insertBack(it.row(), j) = it.value();
+				}
 			}
 		}
-	}
-	else
-	{
-		// Compute res = Q * other column by column using parallel for loop
+		else
+		{
+			// Compute res = Q * other column by column using parallel for loop
 
-		//begin = clock();
-		// Compute res = Q * other column by column
-		SparseVector resColJ;
-		VectorXd resColJd;
-		VectorXd tmpResColJ;
-		for (Index j = 0; j < res.cols(); j++) {
-			resColJd = res.col(j).toDense();
-			for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-				tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
-				tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
-				MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
-				if (remaining > 0) {
-					tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
+			//begin = clock();
+			// Compute res = Q * other column by column
+			SparseVector resColJ;
+			VectorXd resColJd;
+			VectorXd tmpResColJ;
+			for (Index j = 0; j < res.cols(); j++) {
+				resColJd = res.col(j).toDense();
+				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
+					tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
+					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
+					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
+					if (remaining > 0) {
+						tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining) = resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining);
+					}
+
+					// We can afford noalias() in this case
+					tmpResColJ.noalias() += m_qr.m_blocksYT[k].value * tmpResColJ;
+
+					resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
+					resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
 				}
 
-				// We can afford noalias() in this case
-				tmpResColJ.noalias() += m_qr.m_blocksYT[k].value * tmpResColJ;
-
-				resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols()) = tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols());
-				resColJd.segment(m_qr.m_blocksYT[k].row + m_qr.m_blocksYT[k].value.cols() + m_qr.m_blocksYT[k].value.numZeros(), remaining) = tmpResColJ.segment(m_qr.m_blocksYT[k].value.cols(), remaining);
-			}
-
-			// Write the result back to j-th column of res
-			resColJ = resColJd.sparseView();
-			resTmp.startVec(j);
-			for (SparseVector::InnerIterator it(resColJ); it; ++it) {
-				resTmp.insertBack(it.row(), j) = it.value();
+				// Write the result back to j-th column of res
+				resColJ = resColJd.sparseView();
+				resTmp.startVec(j);
+				for (SparseVector::InnerIterator it(resColJ); it; ++it) {
+					resTmp.insertBack(it.row(), j) = it.value();
+				}
 			}
 		}
-	}
 
-	//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-	resTmp.finalize();
-	// Assign the output
-	res = resTmp;
+		//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+		resTmp.finalize();
+		// Assign the output
+		res = resTmp;
 	}
 
   const SparseBandedBlockedQR_GeneralType& m_qr;
@@ -705,15 +704,13 @@ struct SparseBandedBlockedQR_General_QProduct : ReturnByValue<SparseBandedBlocke
 };
 
 template <typename SparseBandedBlockedQR_GeneralType>
-struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType, VectorXd> : ReturnByValue<SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType, VectorXd> >
+struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType, VectorX> : ReturnByValue<SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType, VectorX> >
 {
 	typedef typename SparseBandedBlockedQR_GeneralType::MatrixType MatrixType;
 	typedef typename SparseBandedBlockedQR_GeneralType::Scalar Scalar;
 
-	typedef typename internal::SparseBandedBlockedQR_General_traits<MatrixType>::Vector SparseVector;
-
 	// Get the references 
-	SparseBandedBlockedQR_General_QProduct(const SparseBandedBlockedQR_GeneralType& qr, const VectorXd& other, bool transpose) :
+	SparseBandedBlockedQR_General_QProduct(const SparseBandedBlockedQR_GeneralType& qr, const VectorX& other, bool transpose) :
 		m_qr(qr), m_other(other), m_transpose(transpose) {}
 	inline Index rows() const { return m_transpose ? m_qr.rows() : m_qr.cols(); }
 	inline Index cols() const { return m_other.cols(); }
@@ -728,19 +725,18 @@ struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType,
 
 		clock_t begin = clock();
 
-		VectorXd resTmp(res.rows() * res.cols());
+		VectorX resTmp(res.rows() * res.cols());
 
 		if (m_transpose)
 		{
 			//Compute res = Q' * other column by column
-			//SparseVector resColJ;
-			VectorXd resColJd;
-			VectorXd tmpResColJ;
+			VectorX resColJd;
+			VectorX tmpResColJ;
 			for (Index j = 0; j < res.cols(); j++) {
 				// Use temporary vector resColJ inside of the for loop - faster access
 				resColJd = res.col(j);
 				for (Index k = 0; k < m_qr.m_blocksYT.size(); k++) {
-					tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
+					tmpResColJ = VectorX(m_qr.m_blocksYT[k].value.rows());
 					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
 					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 					if (remaining > 0) {
@@ -761,13 +757,12 @@ struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType,
 		{
 			//begin = clock();
 			// Compute res = Q * other column by column
-			//SparseVector resColJ;
-			VectorXd resColJd;
-			VectorXd tmpResColJ;
+			VectorX resColJd;
+			VectorX tmpResColJ;
 			for (Index j = 0; j < res.cols(); j++) {
 				resColJd = res.col(j);
 				for (Index k = m_qr.m_blocksYT.size() - 1; k >= 0; k--) {
-					tmpResColJ = VectorXd(m_qr.m_blocksYT[k].value.rows());
+					tmpResColJ = VectorX(m_qr.m_blocksYT[k].value.rows());
 					tmpResColJ.segment(0, m_qr.m_blocksYT[k].value.cols()) = resColJd.segment(m_qr.m_blocksYT[k].row, m_qr.m_blocksYT[k].value.cols());
 					MatrixType::StorageIndex remaining = m_qr.m_blocksYT[k].value.rows() - m_qr.m_blocksYT[k].value.cols();
 					if (remaining > 0) {
@@ -786,13 +781,13 @@ struct SparseBandedBlockedQR_General_QProduct<SparseBandedBlockedQR_GeneralType,
 		}
 
 		//std::cout << "Elapsed for loop: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-		//resTmp.finalize();
+
 		// Assign the output
 		res = resTmp;
 	}
 
 	const SparseBandedBlockedQR_GeneralType& m_qr;
-	const VectorXd& m_other;
+	const VectorX& m_other;
 	bool m_transpose;
 };
 
