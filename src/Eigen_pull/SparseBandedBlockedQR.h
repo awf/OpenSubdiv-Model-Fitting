@@ -98,6 +98,10 @@ namespace Eigen {
 		typedef SparseMatrix<Scalar, ColMajor, StorageIndex> MatrixRType;
 		typedef PermutationMatrix<Dynamic, Dynamic, StorageIndex> PermutationType;
 
+		/*
+		 * Stores information about a dense block in a block sparse matrix.
+		 * Holds the position of the block (row index, column index) and its size (number of rows, number of columns).
+		 */
 		template <typename IndexType>
 		struct BlockInfo {
 			IndexType rowIdx;
@@ -298,7 +302,7 @@ namespace Eigen {
 
 	protected:
 		typedef SparseMatrix<Scalar, ColMajor, StorageIndex> MatrixQStorageType;
-		typedef SparseBlockCOO<BlockYTY<StorageIndex>, StorageIndex> SparseBlockYTY;
+		typedef SparseBlockCOO<BlockYTY<Scalar, StorageIndex>, StorageIndex> SparseBlockYTY;
 
 		bool m_analysisIsok;
 		bool m_factorizationIsok;
@@ -306,31 +310,30 @@ namespace Eigen {
 		std::string m_lastError;
 		MatrixQStorageType m_pmat;            // Temporary matrix
 		MatrixRType m_R;                // The triangular factor matrix
-		SparseBlockYTY m_blocksYT;
+		SparseBlockYTY m_blocksYT;		// Sparse block matrix storage holding the dense YTY blocks of the blocked representation of Householder reflectors.
 		PermutationType m_outputPerm_c; // The final column permutation (for compatibility here, set to identity)
 		PermutationType m_rowPerm;
 		RealScalar m_threshold;         // Threshold to determine null Householder reflections
 		bool m_useDefaultThreshold;     // Use default threshold
 		Index m_nonzeropivots;          // Number of non zero pivots found
+		bool m_useMultiThreading;		// Use multithreaded implementation of Householder product evaluation
 
-		BlockInfoMap m_blockMap;
-		BlockInfoMapOrder m_blockOrder;
+		/*
+		 * Structures filled during sparse matrix pattern analysis.
+		 */
+		BlockInfoMap m_blockMap;		// Sparse matrix block information
+		BlockInfoMapOrder m_blockOrder; // Sparse matrix block order
 
-		bool m_useMultiThreading;
 
 		template <typename, typename > friend struct SparseBandedBlockedQR_QProduct;
 
 	};
 
-	/** \brief Preprocessing step of a QR factorization
-	  *
-	  * \warning The matrix \a mat must be in compressed mode (see SparseMatrix::makeCompressed()).
-	  *
-	  * In this step, the fill-reducing permutation is computed and applied to the columns of A
-	  * and the column elimination tree is computed as well. Only the sparsity pattern of \a mat is exploited.
-	  *
-	  * \note In this step it is assumed that there is no empty row in the matrix \a mat.
-	  */
+	/*
+	 * Helper structure holding band information for a single row.
+	 * Stores original row index (before any row reordering was performed),
+	 * index of the first nonzero (start) and last nonzero(end) in the band and the band length (length).
+	 */
 	template <typename IndexType>
 	struct RowRange {
 		IndexType origIdx;
@@ -345,17 +348,19 @@ namespace Eigen {
 			: origIdx(origIdx), start(start), end(end) {
 			this->length = this->end - this->start + 1;
 		}
-
-		bool operator<(const RowRange &rr) const {
-			if (this->start < rr.start) {
-				return true;
-			}
-			else {
-				return (rr.start < this->end) && (this->end > rr.end);
-			}
-		}
 	};
-	
+
+	/** \brief Preprocessing step of a QR factorization
+	*
+	* \warning The matrix \a mat must be in compressed mode (see SparseMatrix::makeCompressed()).
+	*
+	* In this step, row-reordering permutation of A is computed and matrix banded structure is analyzed.
+	* This is neccessary preprocessing step before the matrix factorization is carried out.
+	*
+	* This step assumes there is some sort of banded structure in the matrix.
+	*
+	* \note In this step it is assumed that there is no empty row in the matrix \a mat.
+	*/
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
 	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::analyzePattern(const MatrixType& mat)
 	{
@@ -367,7 +372,9 @@ namespace Eigen {
 		Index m = mat.rows();
 		Index diagSize = (std::min)(m, n);
 
-		// Go through the matrix and reorder rows so that the matrix gets as-banded-as-possible structure
+		// Looking for as-banded-as-possible structure in the matrix
+		/******************************************************************/
+		// 1) Compute and store band information for each row in the matrix
 		BlockBandSize bandWidths, bandHeights;
 		RowMajorMatrixType rmMat(mat);
 		std::vector<MatrixRowRange> rowRanges;
@@ -396,20 +403,21 @@ namespace Eigen {
 			}
 		}
 
-		// Sort the rows to form as-banded-as-possible matrix
+		/******************************************************************/
+		// 2) Sort the rows to form as-banded-as-possible matrix
 		std::sort(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
 			return (lhs.start < rhs.start);
 		});
 
-		// Search for the blocks		
+		/******************************************************************/
+		// 3) Search for banded blocks (blocks of row sharing same/similar band)		
 		MatrixType::StorageIndex maxColStep = 0;
 		for(MatrixType::StorageIndex j = 0; j < rowRanges.size() - 1; j++) {
 			if ((rowRanges.at(j + 1).start - rowRanges.at(j).start) > maxColStep) {
 				maxColStep = (rowRanges.at(j + 1).start - rowRanges.at(j).start);
 			}
 		}
-
-		// And now create the final blocks
+		// And record the estimated block structure
 		Eigen::Matrix<MatrixType::StorageIndex, Dynamic, 1> permIndices(rowRanges.size());
 		MatrixType::StorageIndex rowIdx = 0;
 		for (auto it = rowRanges.begin(); it != rowRanges.end(); ++it, rowIdx++) {
@@ -420,9 +428,12 @@ namespace Eigen {
 				this->m_blockMap.insert(std::make_pair(it->start, MatrixBlockInfo(rowIdx, it->start, bandHeights.at(it->start), bandWidths.at(it->start))));
 			}
 		}
+		// Create row permutation matrix that achieves the desired row reordering
 		this->m_rowPerm = PermutationType(permIndices);
-		
-		// Merge several blocks together
+
+		/******************************************************************/
+		// 4) Go through the estimated block structure
+		// And merge several blocks together if needed/possible in order to form reasonably big banded blocks
 		BlockInfoMap newBlockMap;
 		BlockInfoMapOrder newBlockOrder;
 		MatrixBlockInfo firstBlock;
@@ -465,7 +476,9 @@ namespace Eigen {
 				newBlockMap[newBlockOrder.back()] = MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, firstBlock.numRows + sumRows, numCols);
 			}
 		}
-		// Update block structure
+
+		/******************************************************************/
+		// 5) Save the final banded block structure that will be used during the factorization process.
 		this->m_blockOrder = newBlockOrder;
 		this->m_blockMap = newBlockMap;
 		
@@ -489,12 +502,14 @@ void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiTh
 	// Not rank-revealing, column permutation is identity
 	m_outputPerm_c.setIdentity(mat.cols());
 
+	// Permute the input matrix using the precomputed row permutation
 	m_pmat = (this->m_rowPerm * mat);
 
-	typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrixType;
-
+	// Triplet array for the matrix R
 	Eigen::TripletArray<Scalar, typename MatrixType::Index> Rvals(2 * mat.nonZeros());
 
+	// Dense QR solver used for each dense block 
+	typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrixType;
 	Eigen::HouseholderQR<DenseMatrixType> houseqr;
 	Index numBlocks = this->m_blockOrder.size();
 
@@ -503,22 +518,24 @@ void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiTh
 	DenseMatrixType Ji = m_pmat.block(bi.rowIdx, bi.colIdx, bi.numRows, bi.numCols);
 	Index activeRows = bi.numRows;
 	Index numZeros = 0;
-	// Some auxiliary variables for later
+
+	// Auxiliary variables
 	MatrixBlockInfo biNext;
 	Index colIncrement, blockOverlap;
+	
+	// Process all blocks
 	for (Index i = 0; i < numBlocks; i++) {
 		// Current block info
 		bi = this->m_blockMap.at(this->m_blockOrder.at(i));
 
-		// Solve the current dense block using Householder QR
+		// 1) Solve the current dense block using dense Householder QR
 		houseqr.compute(Ji);
 
-		// Update matrices T and Y
+		// 2) Create matrices T and Y
 		MatrixXd T = MatrixXd::Zero(bi.numCols, bi.numCols);
 		MatrixXd Y = MatrixXd::Zero(activeRows, bi.numCols);
 		VectorXd v = VectorXd::Zero(activeRows);
 		VectorXd z = VectorXd::Zero(activeRows);
-
 		v(0) = 1.0;
 		v.segment(1, houseqr.householderQ().essentialVector(0).rows()) = houseqr.householderQ().essentialVector(0);
 		Y.col(0) = v;
@@ -534,16 +551,12 @@ void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiTh
 			T.col(bc) = z;
 			T(bc, bc) = -houseqr.hCoeffs()(bc);
 		}
-
-		/*
-		* Save current Y and T. Can be saved separately as upper (diagoal) part of Y & T and lower (off-diagonal) part of Y & Y
-		*/
+		// Save current Y and T. The block YTY contains a main diagonal and subdiagonal part separated by (numZeros) zero rows.
 		Index diagIdx = bi.colIdx;
-		m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<StorageIndex>(Y, T, numZeros)));
+		m_blocksYT.insert(SparseBlockYTY::Element(diagIdx, diagIdx, BlockYTY<Scalar, StorageIndex>(Y, T, numZeros)));
 		
-		// Get the R part of the dense QR decomposition 
+		// 3) Get the R part of the dense QR decomposition 
 		MatrixXd V = houseqr.matrixQR().template triangularView<Upper>();
-
 		// Update sparse R with the rows solved in this step
 		int solvedRows = (i == numBlocks - 1) ? bi.numRows : this->m_blockMap.at(this->m_blockOrder.at(i + 1)).colIdx - bi.colIdx;
 		for (MatrixType::StorageIndex br = 0; br < solvedRows; br++) {
@@ -552,7 +565,7 @@ void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiTh
 			}
 		}
 
-		// If this is not the last block, proceed to the next block
+		// 4) If this is not the last block, proceed to the next block
 		if (i < numBlocks - 1) {
 			biNext = this->m_blockMap.at(this->m_blockOrder.at(i + 1));
 			blockOverlap = (bi.colIdx + bi.numCols) - biNext.colIdx;
@@ -569,7 +582,7 @@ void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiTh
 		}
 	}
 
-  // Finalize the column pointers of the sparse matrices R, W and Y
+  // 5) Finalize the R matrix and set factorization-related flags
   m_R.setFromTriplets(Rvals.begin(), Rvals.end());
   m_R.makeCompressed();
 
@@ -580,19 +593,13 @@ void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiTh
   m_info = Success;
 }
 
-#define FULL_TO_BLOCK_VEC(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
-	blockVec = VectorXd(yRows); \
-	blockVec.segment(0, yCols) = fullVec.segment(blockRowIdx, yCols); \
-	if(numSubdiagElems > 0) { \
-		blockVec.segment(yCols, numSubdiagElems) = fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems); \
-	} 
-
-#define BLOCK_VEC_TO_FULL(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
-	fullVec.segment(blockRowIdx, yCols) = blockVec.segment(0, yCols); \
-	fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems) = blockVec.segment(yCols, numSubdiagElems);
-
-
-// xxawf boilerplate all this into BlockSparseBandedBlockedQR...
+/*
+ * General Householder product evaluation performing Q * A or Q.T * A.
+ * The general version is assuming that A is sparse and that the output will be sparse as well.
+ * Offers single-threaded and multi-threaded implementation. 
+ * The choice of implementation depends on a template parameter of the SparseBandedBlockedQR class.
+ * The single-threaded implementation cannot work in-place. It is implemented this way for performance related reasons.
+ */
 template <typename SparseBandedBlockedQRType, typename Derived>
 struct SparseBandedBlockedQR_QProduct : ReturnByValue<SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived> >
 {
@@ -613,11 +620,9 @@ struct SparseBandedBlockedQR_QProduct : ReturnByValue<SparseBandedBlockedQR_QPro
   {
 	  Index m = m_qr.rows();
 	  Index n = m_qr.cols();
-
-	  clock_t begin = clock();
 	  
 	  if(m_qr.m_useMultiThreading) {
-		  /********************************* MT *****************************/
+	  /********************************* MT *****************************/
 
 		  std::vector<std::vector<std::pair<typename MatrixType::Index, Scalar>>> resVals(m_other.cols());
 		  Index numNonZeros = 0;
@@ -730,7 +735,7 @@ struct SparseBandedBlockedQR_QProduct : ReturnByValue<SparseBandedBlockedQR_QPro
 			res.finalize();
 
 		} else {
-			/********************************* ST *****************************/
+		/********************************* ST *****************************/
 			res = Derived(m_other.rows(), m_other.cols());
 			res.reserve(m_other.rows() * m_other.cols() * 0.25);// FixMe: Better estimation of nonzeros?
 
@@ -798,6 +803,11 @@ struct SparseBandedBlockedQR_QProduct : ReturnByValue<SparseBandedBlockedQR_QPro
   bool m_transpose;
 };
 
+/*
+ * Specialization of the Householder product evaluation performing Q * A or Q.T * A
+ * for the case when A and the output are dense vectors.=
+ * Offers only single-threaded implementation as the overhead of multithreading would not bring any speedup for a dense vector (A is single column).
+ */
 template <typename SparseBandedBlockedQRType>
 struct SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, VectorX> : ReturnByValue<SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, VectorX> >
 {
@@ -818,7 +828,7 @@ struct SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, VectorX> : Retu
 		Index n = m_qr.cols();
 		res = m_other;
 
-		clock_t begin = clock();
+		//clock_t begin = clock();
 
 		VectorX resTmp(res.rows() * res.cols());
 
