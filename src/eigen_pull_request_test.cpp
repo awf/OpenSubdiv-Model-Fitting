@@ -18,6 +18,7 @@
 #include <Eigen/src/CholmodSupport/CholmodSupport.h>
 
 #include "Eigen_pull/SparseBandedBlockedQR.h"
+#include "Eigen_pull/SparseBlockAngularQR.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -33,6 +34,13 @@ typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianType;
 typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
 typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
 typedef SparseBandedBlockedQR<JacobianType, NaturalOrdering<int>, 8, false> BandedBlockedQRSolver;
+
+// QR for J1 is banded blocked QR
+typedef BandedBlockedQRSolver LeftSuperBlockSolver;
+// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
+typedef ColPivHouseholderQR<MatrixType> RightSuperBlockSolver;
+// QR solver for sparse block angular matrix
+typedef SparseBlockAngularQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> BlockAngularQRSolver;
 
 /*
  * Generate random sparse banded matrix.
@@ -153,6 +161,39 @@ void generate_block_diagonal_matrix(const Eigen::Index numParams, const Eigen::I
 		spJ = perm * spJ;
 	}
 }
+/*
+* Generate block angular sparse matrix with overlapping diagonal blocks.
+*/
+void generate_block_angular_matrix(const Eigen::Index numParams, const Eigen::Index numAngularParams, const Eigen::Index numResiduals, JacobianType &spJ) {
+	std::default_random_engine gen;
+	std::uniform_real_distribution<double> dist(0.5, 5.0);
+
+	int stride = 7;
+	Eigen::TripletArray<Scalar, typename JacobianType::Index> jvals(stride * numParams + numResiduals * numAngularParams);
+	for (int i = 0; i < numParams; i++) {
+		for (int j = i * 2; j < (i * 2) + 2 && j < numParams; j++) {
+			jvals.add(i * stride, j, dist(gen));
+			jvals.add(i * stride + 1, j, dist(gen));
+			jvals.add(i * stride + 2, j, dist(gen));
+			jvals.add(i * stride + 3, j, dist(gen));
+			jvals.add(i * stride + 4, j, dist(gen));
+			jvals.add(i * stride + 5, j, dist(gen));
+			jvals.add(i * stride + 6, j, dist(gen));
+			if (j < numParams - 2) {
+				jvals.add(i * stride + 6, j + 2, dist(gen));
+			}
+		}
+	}
+	for (int i = 0; i < numResiduals; i++) {
+		for (int j = 0; j < numAngularParams; j++) {
+			jvals.add(i, numParams + j, dist(gen));
+		}
+	}
+
+	spJ.resize(numResiduals, numParams + numAngularParams);
+	spJ.setFromTriplets(jvals.begin(), jvals.end());
+	spJ.makeCompressed();
+}
 
 
 int main() {
@@ -193,7 +234,7 @@ int main() {
 	/*
 	* Solve the problem using the special banded QR solver.
 	*/
-	std::cout << "Solver: General Banded Blocked QR" << std::endl;
+	std::cout << "Solver: Sparse Banded Blocked QR" << std::endl;
 	std::cout << "---------------------- Timing ----------------------" << std::endl;
 	BandedBlockedQRSolver slvr;
 
@@ -252,6 +293,49 @@ int main() {
 	std::cout << "||Qt   * J - R||_2 = " << (slvrQt * spJ - slvr.matrixR()).norm() << std::endl;
 	//std::cout << "||Q.T  * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
+
+	// Generate new input 
+	Eigen::Index numAngularParams = 384; // 128 control points
+	generate_block_angular_matrix(numParams, numAngularParams, numResiduals, spJ);
+
+	std::cout << "####################################################" << std::endl;
+	std::cout << "Problem size (r x c): " << spJ.rows() << " x " << spJ.cols() << std::endl;
+	std::cout << "Left block (sparse): " << numResiduals << " x " << numParams << std::endl;
+	std::cout << "Right block (dense): " << numResiduals << " x " << numAngularParams << std::endl;
+	std::cout << "####################################################" << std::endl;
+	
+	// 6) Solve sparse block angular matrix
+	std::cout << "Solver: Sparse Block Angular QR" << std::endl;
+	std::cout << " Left sub-solver: Sparse Banded Blocked QR" << std::endl;
+	std::cout << " Right sub-solver: Dense Column Piv House QR" << std::endl;
+	std::cout << "---------------------- Timing ----------------------" << std::endl;
+	// Factorize
+	BlockAngularQRSolver baqr;
+	begin = clock();
+	baqr.setSparseBlockParams(numResiduals, numParams);
+	baqr.compute(spJ);
+	std::cout << "Factorization:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	// Benchmark LS solving
+	std::cout << "Solve LS: " << std::endl;
+	// Prepare the data
+	Eigen::VectorXd baqrVecDense = Eigen::VectorXd::Random(spJ.rows());
+	// Apply row permutation before solving
+	baqrVecDense = baqr.rowsPermutation() * baqrVecDense;
+	// Solve LS
+	begin = clock();
+	Eigen::VectorXd baqrResDense;
+	for (int i = 0; i < nVecEvals; i++) {
+		baqrResDense = baqr.matrixQ() * baqrVecDense;//slvrVec;
+	}
+	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+	begin = clock();
+	VectorXd baqrSolved;
+	for (int i = 0; i < nVecEvals; i++) {
+		baqrSolved = baqr.matrixR().template triangularView<Upper>().solve(baqrResDense);
+	}
+	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+	std::cout << "####################################################" << std::endl;
+
 
 #if !defined(_DEBUG) && defined(OUTPUT_MAT)
 	Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
