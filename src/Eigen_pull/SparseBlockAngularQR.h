@@ -99,7 +99,7 @@ class SparseBlockAngularQR : public SparseSolverBase<SparseBlockAngularQR<_Matri
     };
 
   public:
-    SparseBlockAngularQR () :  m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true),m_isQSorted(false),m_isEtreeOk(false),m_blockCols(1)
+    SparseBlockAngularQR () :  m_analysisIsok(false), m_lastError(""), m_isQSorted(false),m_blockCols(1)
     { }
 
     /** Construct a QR factorization of the matrix \a mat.
@@ -108,7 +108,7 @@ class SparseBlockAngularQR : public SparseSolverBase<SparseBlockAngularQR<_Matri
       *
       * \sa compute()
       */
-    explicit SparseBlockAngularQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true),m_isQSorted(false),m_isEtreeOk(false),m_blockCols(1)
+    explicit SparseBlockAngularQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_isQSorted(false),m_blockCols(1)
     {
       compute(mat);
     }
@@ -222,8 +222,7 @@ class SparseBlockAngularQR : public SparseSolverBase<SparseBlockAngularQR<_Matri
       */
     void setPivotThreshold(const RealScalar& threshold)
     {
-      m_useDefaultThreshold = false;
-      m_threshold = threshold;
+		// No pivoting ...
     }
 
     /** \returns the solution X of \f$ A X = B \f$ using the current decomposition of A.
@@ -286,17 +285,12 @@ class SparseBlockAngularQR : public SparseSolverBase<SparseBlockAngularQR<_Matri
     std::string m_lastError;
 
     MatrixRType m_R;                // The triangular factor matrix
-    ScalarVector m_hcoeffs;         // The Householder coefficients
-    PermutationType m_pivotperm;    // The permutation for rank revealing
     PermutationType m_outputPerm_c; // The final column permutation
 	PermutationType m_rowPerm;		// The final row permutation
-    RealScalar m_threshold;         // Threshold to determine null Householder reflections
-    bool m_useDefaultThreshold;     // Use default threshold
     Index m_nonzeropivots;          // Number of non zero pivots found
     IndexVector m_etree;            // Column elimination tree
     IndexVector m_firstRowElt;      // First element in each row
     bool m_isQSorted;               // whether Q is sorted or not
-    bool m_isEtreeOk;               // whether the elimination tree match the initial input matrix
 
     Index m_blockCols;                // Cols of first block
 	Index m_blockRows;				  // Rows of the first block
@@ -477,6 +471,7 @@ struct SparseBlockAngularQR_QProduct : ReturnByValue<SparseBlockAngularQR_QProdu
       ///       | 0 Q2' |               | 0 Q2' |   [ Q1tv2 ]    [ Q2' * Q1tv2 ]    
 		
 	  res = m_other;
+	  // jasvob FixMe: The multipliation has to be split on 3 lines like this in order for the Eigen type inference to work well. 
 	  DesType otherTopRows = m_other.topRows(n1);
 	  DesType resTopRows = m_qr.m_leftSolver.matrixQ().transpose() * otherTopRows;
 	  res.topRows(n1) = resTopRows;
