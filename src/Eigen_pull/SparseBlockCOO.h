@@ -12,21 +12,45 @@
 
 #include <Eigen/Eigen>
 
-template <typename IndexType>
+/*
+ * Each block YTY is devided into diagonal part and subdiagonal part, which is "running away" from the main diagonal
+ * as we go along the columns of the matrix.
+ */
+// Take the full column vector and compose dense vector from the main diagonal and subdiagonal part of the block, skipping zero elements in the middle
+#define FULL_TO_BLOCK_VEC(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
+	blockVec = VectorXd(yRows); \
+	blockVec.segment(0, yCols) = fullVec.segment(blockRowIdx, yCols); \
+	if(numSubdiagElems > 0) { \
+		blockVec.segment(yCols, numSubdiagElems) = fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems); \
+	} 
+
+// Take the dense vector composed from the main diagonal and subdiagonal part of the block, skipping zero elements in the middle, and fill it back into the full column vector
+#define BLOCK_VEC_TO_FULL(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
+	fullVec.segment(blockRowIdx, yCols) = blockVec.segment(0, yCols); \
+	fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems) = blockVec.segment(yCols, numSubdiagElems);
+
+/*
+ * A dense block of the compressed WY representation (YTY) of the Householder product.
+ * Stores matrices Y (m x n) and T (n x n) and number of zeros between main diagonal and subdiagonal parts of the block YTY.
+ * Provides overloaded multiplication operator (*) allowing to easily perform the multiplication with a dense vector (Y * (T * (Y' * v)))
+ */
+template <typename ScalarType, typename IndexType>
 class BlockYTY {
+	typedef Eigen::Matrix<ScalarType, Eigen::Dynamic, Eigen::Dynamic> MatrixType;
+	typedef Eigen::Matrix<ScalarType, Eigen::Dynamic, 1> VectorType;
 public:
 	BlockYTY() {
 	}
 
-	BlockYTY(const Eigen::MatrixXd &Y, const Eigen::MatrixXd &T, const IndexType numZeros)
+	BlockYTY(const MatrixType &Y, const MatrixType &T, const IndexType numZeros)
 		: matY(Y), matT(T), nzrs(numZeros) {
 	}
 
-	Eigen::MatrixXd& Y() {
+	MatrixType& Y() {
 		return this->matY;
 	}
 
-	Eigen::MatrixXd& T() {
+	MatrixType& T() {
 		return this->matT;
 	}
 
@@ -46,21 +70,26 @@ public:
 	}
 
 	// FixMe: Is there a better way? (This is faster than calling .transpose() *
-	Eigen::VectorXd multTransposed(const Eigen::VectorXd &other) const {
+	VectorType multTransposed(const VectorType &other) const {
 		return (this->matY * (this->matT.transpose() * (this->matY.transpose() * other)));
 	}
 	
-	Eigen::VectorXd operator*(const Eigen::VectorXd &other) const {
+	VectorType operator*(const VectorType &other) const {
 		return (this->matY * (this->matT * (this->matY.transpose() * other)));
 	}
 
 private:
-	Eigen::MatrixXd matY;
-	Eigen::MatrixXd matT;
+	MatrixType matY;
+	MatrixType matT;
 
 	IndexType nzrs;
 };
 
+/*
+ * Storage type for general sparse matrix with block structure.
+ * Each element holds block position (row index, column index) and the values in the block stored in ValueType.
+ * ValueType is a template type and can generally represent any datatype, both default and user defined.
+ */
 template <typename ValueType, typename IndexType>
 class SparseBlockCOO {
 public:
