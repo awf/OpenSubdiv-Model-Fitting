@@ -24,6 +24,8 @@
 #include <unsupported/Eigen/LevenbergMarquardt>
 #include <unsupported/Eigen/SparseExtra>
 
+#include "unsupported/Eigen/src/SparseExtra/BlockDiagonalSparseQR.h"
+
 #include "Logger.h"
 
 using namespace Eigen;
@@ -33,7 +35,7 @@ using namespace Eigen;
 typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianType;
 typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
 typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
-typedef SparseBandedBlockedQR<JacobianType, NaturalOrdering<int>, 8, false> BandedBlockedQRSolver;
+typedef SparseBandedBlockedQR<JacobianType, NaturalOrdering<int>, 2, false> BandedBlockedQRSolver;
 
 // QR for J1 is banded blocked QR
 typedef BandedBlockedQRSolver LeftSuperBlockSolver;
@@ -41,6 +43,10 @@ typedef BandedBlockedQRSolver LeftSuperBlockSolver;
 typedef ColPivHouseholderQR<MatrixType> RightSuperBlockSolver;
 // QR solver for sparse block angular matrix
 typedef SparseBlockAngularQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> BlockAngularQRSolver;
+
+typedef ColPivHouseholderQR<Matrix<Scalar, 7, 2> > DenseQRSolver7x2;
+typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolver7x2> BlockDiagonalQRSolver;
+
 
 /*
  * Generate random sparse banded matrix.
@@ -210,14 +216,14 @@ int main() {
 	 * Set-up the problem to be solved
 	*/
 	// Problem size
-	Eigen::Index numVars = 1024;
+	Eigen::Index numVars = 256;//1024;
 	Eigen::Index numParams = numVars * 2;
 	Eigen::Index numResiduals = numVars * 3 + numVars + numVars * 3;
 	// Generate the sparse matrix
 	JacobianType spJ;
 	//generate_random_banded_matrix(numParams, numResiduals, spJ, true);
-	generate_overlapping_block_diagonal_matrix(numParams, numResiduals, spJ, true);
-	//generate_block_diagonal_matrix(numParams, numResiduals, spJ, true);
+	//generate_overlapping_block_diagonal_matrix(numParams, numResiduals, spJ, true);
+	generate_block_diagonal_matrix(numParams, numResiduals, spJ, false);
 
 #if !defined(_DEBUG) && defined(OUTPUT_MAT)
 	Logger::instance()->logMatrixCSV(spJ.toDense(), "slvrJ.csv");
@@ -231,6 +237,49 @@ int main() {
 	std::cout << "Problem size (r x c): " << spJ.rows() << " x " << spJ.cols() << std::endl;
 	std::cout << "####################################################" << std::endl;
 
+
+
+#if !defined(_DEBUG)
+	BlockDiagonalQRSolver bdqr;
+	bdqr.setSparseBlockParams(7, 2);
+	bdqr.compute(spJ);
+	JacobianType bdqrQ(spJ.rows(), spJ.rows());
+	bdqrQ = bdqr.matrixQ() * I;
+	//Logger::instance()->logMatrixCSV(bdqr.matrixR().toDense(), "slvrR_bdqr.csv");
+	JacobianType spJPerm = (spJ * bdqr.colsPermutation());
+
+	std::cout << "||Q    * R - J||_2 = " << (bdqrQ * bdqr.matrixR() - spJPerm).norm() << std::endl;
+	std::cout << "||Q.T  * J - R||_2 = " << (bdqrQ.transpose() * spJPerm - bdqr.matrixR()).norm() << std::endl;
+	//Logger::instance()->logMatrixCSV(bdqrQ.toDense(), "slvr_bdqrQ.csv");
+
+	std::cout << "Solve LS: " << std::endl;
+	// Prepare the data
+	Eigen::VectorXd bdqrXDense = Eigen::VectorXd::Random(spJ.cols());
+	Eigen::VectorXd bdqrVecDense = spJ * bdqrXDense;
+	// Solve LS
+	begin = clock();
+	Eigen::VectorXd bdqrResDense;
+	for (int i = 0; i < nVecEvals; i++) {
+		bdqrResDense = bdqr.matrixQ().transpose() * bdqrVecDense;//slvrVec;
+	}
+	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+	begin = clock();
+	VectorXd bdqrSolved;
+	for (int i = 0; i < nVecEvals; i++) {
+		bdqrSolved = bdqr.matrixR().template triangularView<Upper>().solve(bdqrResDense);
+	}
+	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+
+	VectorXd bdqrSolvedBackperm = VectorXd::Zero(spJ.cols());
+	for (int i = 0; i < spJ.cols(); i++) {
+		bdqrSolvedBackperm(bdqr.colsPermutation().indices().coeff(i)) = bdqrSolved(i);
+	}
+	std::cout << "||targetX  - X||_2 = " << (bdqrXDense - bdqrSolvedBackperm).norm() << std::endl;
+
+#endif
+
+
+
 	/*
 	* Solve the problem using the special banded QR solver.
 	*/
@@ -242,38 +291,34 @@ int main() {
 	begin = clock();
 	slvr.compute(spJ);
 	std::cout << "Factorization:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
-	// 2) Apply computed row reordering
-	spJ = slvr.rowsPermutation() * spJ;
+	//Logger::instance()->logMatrixCSV(slvr.matrixR().toDense(), "slvrR.csv");
 	
-	// 3) Benchmark expressing full Q 
+	// 2) Benchmark expressing full Q 
 	// Q * I
 	std::cout << "Express full Q: " << std::endl;
 	begin = clock();
 	JacobianType slvrQ(spJ.rows(), spJ.rows());
 	slvrQ = slvr.matrixQ() * I;
 	std::cout << "matrixQ()   * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	//Logger::instance()->logMatrixCSV(slvrQ.toDense(), "slvrQ.csv");
 
 	// Q.T * I
 	begin = clock();
 	JacobianType slvrQt(spJ.rows(), spJ.rows());
 	slvrQt = slvr.matrixQ().transpose() * I;
 	std::cout << "matrixQ().T * I: " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
+	//Logger::instance()->logMatrixCSV(slvrQt.toDense(), "slvrQtranspose.csv");
 
-	// 4) Benchmark LS solving
+	// 3) Benchmark LS solving
 	std::cout << "Solve LS: " << std::endl;
 	// Prepare the data
-	Eigen::VectorXd slvrVecDense = Eigen::VectorXd::Random(spJ.rows());
-	JacobianType slvrVec(spJ.rows(), 1);
-	for (int i = 0; i < slvrVec.rows(); i++) {
-		for (int j = 0; j < slvrVec.cols(); j++) {
-			slvrVec.coeffRef(i, j) = dist(gen);
-		}
-	}
+	Eigen::VectorXd slvrXDense = Eigen::VectorXd::Random(spJ.cols());
+	Eigen::VectorXd slvrVecDense = spJ * slvrXDense;
 	// Solve LS
 	begin = clock();
 	Eigen::VectorXd slvrResDense;
 	for(int i = 0; i < nVecEvals; i++) {
-		slvrResDense = slvr.matrixQ() * slvrVecDense;//slvrVec;
+		slvrResDense = slvr.matrixQ().transpose() * slvrVecDense;//slvrVec;
 	}
 	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
 	begin = clock();
@@ -283,6 +328,14 @@ int main() {
 	}
 	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
 
+	VectorXd solvedBackperm = VectorXd::Zero(spJ.cols());
+	for (int i = 0; i < spJ.cols(); i++) {
+		solvedBackperm(slvr.colsPermutation().indices().coeff(i)) = solved(i);
+	}
+
+	// 4) Apply computed row reordering
+	spJ = slvr.rowsPermutation() * spJ;
+
 	// 5) Show statistics and residuals
 	std::cout << "---------------------- Stats -----------------------" << std::endl;
 	std::cout << "Q non-zeros: " << slvrQ.nonZeros() << " (" << (slvrQ.nonZeros() / double(slvrQ.rows() * slvrQ.cols())) * 100 << "%)" << std::endl;
@@ -291,10 +344,16 @@ int main() {
 	std::cout << "||Q.T  * J - R||_2 = " << (slvrQ.transpose() * spJ - slvr.matrixR()).norm() << std::endl;
 	std::cout << "||Qt.T * R - J||_2 = " << (slvrQt.transpose() * slvr.matrixR() - spJ).norm() << std::endl;
 	std::cout << "||Qt   * J - R||_2 = " << (slvrQt * spJ - slvr.matrixR()).norm() << std::endl;
+	std::cout << "||targetX  - X||_2 = " << (slvrXDense - solvedBackperm).norm() << std::endl;
 	//std::cout << "||Q.T  * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
 
+	return 0;
+
 	// Generate new input 
+	numVars = 1024;
+	numParams = numVars * 2;
+	numResiduals = numVars * 3 + numVars + numVars * 3;
 	Eigen::Index numAngularParams = 384; // 128 control points
 	generate_block_angular_matrix(numParams, numAngularParams, numResiduals, spJ);
 
@@ -318,14 +377,15 @@ int main() {
 	// Benchmark LS solving
 	std::cout << "Solve LS: " << std::endl;
 	// Prepare the data
-	Eigen::VectorXd baqrVecDense = Eigen::VectorXd::Random(spJ.rows());
+	Eigen::VectorXd baqrXDense = Eigen::VectorXd::Random(spJ.cols());
+	Eigen::VectorXd baqrVecDense = spJ * baqrXDense;
 	// Apply row permutation before solving
 	baqrVecDense = baqr.rowsPermutation() * baqrVecDense;
 	// Solve LS
 	begin = clock();
 	Eigen::VectorXd baqrResDense;
 	for (int i = 0; i < nVecEvals; i++) {
-		baqrResDense = baqr.matrixQ() * baqrVecDense;//slvrVec;
+		baqrResDense = baqr.matrixQ().transpose() * baqrVecDense;//slvrVec;
 	}
 	std::cout << "matrixQ()   * v: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
 	begin = clock();
@@ -333,7 +393,13 @@ int main() {
 	for (int i = 0; i < nVecEvals; i++) {
 		baqrSolved = baqr.matrixR().template triangularView<Upper>().solve(baqrResDense);
 	}
+	VectorXd baqrSolvedBackperm = VectorXd::Zero(spJ.cols());
+	for (int i = 0; i < spJ.cols(); i++) {
+		baqrSolvedBackperm(baqr.colsPermutation().indices().coeff(i)) = baqrSolved(i);
+	}
 	std::cout << "matrixR() \\ res: " << double(clock() - begin) / CLOCKS_PER_SEC << "s (eval " << nVecEvals << "x) \n";
+	std::cout << "---------------------- Errors ----------------------" << std::endl;
+	std::cout << "||targetX - X||_2 = " << (baqrXDense - baqrSolvedBackperm).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
 
 

@@ -266,6 +266,17 @@ ADD_EXECUTABLE(Eigen_Pull_Request_Test
     Logger.cpp
 	Logger.h
 	Eigen_pull/eigen_extras.h
+	Eigen_pull/SparseBlockAngularQR.h
+	Eigen_pull/SparseBandedBlockedQR.h
+	Eigen_pull/SparseBlockCOO.h
+	)
+
+ADD_EXECUTABLE(Eigen_Pull_Request_FitEllipse
+	eigen_pull_request_fitellipse.cpp
+    Logger.cpp
+	Logger.h
+	Eigen_pull/eigen_extras.h
+	Eigen_pull/SparseBlockAngularQR.h
 	Eigen_pull/SparseBandedBlockedQR.h
 	Eigen_pull/SparseBlockCOO.h
 	)
@@ -276,3 +287,4 @@ TARGET_LINK_LIBRARIES(QR_Banded_Test ${OSD_LIB} ${SSP_LIB})
 TARGET_LINK_LIBRARIES(QR_Banded_Blocked_Test ${OSD_LIB} ${SSP_LIB})
 TARGET_LINK_LIBRARIES(QR_Banded_General_Test ${OSD_LIB} ${SSP_LIB})
 TARGET_LINK_LIBRARIES(Eigen_Pull_Request_Test ${OSD_LIB} ${SSP_LIB})
+TARGET_LINK_LIBRARIES(Eigen_Pull_Request_FitEllipse ${OSD_LIB} ${SSP_LIB})
