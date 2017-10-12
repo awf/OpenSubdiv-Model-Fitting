@@ -13,9 +13,9 @@
 #include <Eigen/Eigen>
 
 /*
- * Each block YTY is devided into diagonal part and subdiagonal part, which is "running away" from the main diagonal
- * as we go along the columns of the matrix.
- */
+* Each block YTY is devided into diagonal part and subdiagonal part, which is "running away" from the main diagonal
+* as we go along the columns of the matrix.
+*/
 // Take the full column vector and compose dense vector from the main diagonal and subdiagonal part of the block, skipping zero elements in the middle
 #define FULL_TO_BLOCK_VEC(fullVec, blockVec, yRows, yCols, blockRowIdx, blockNumZeros, numSubdiagElems) \
 	blockVec = VectorXd(yRows); \
@@ -30,10 +30,10 @@
 	fullVec.segment(blockRowIdx + yCols + blockNumZeros, numSubdiagElems) = blockVec.segment(yCols, numSubdiagElems);
 
 /*
- * A dense block of the compressed WY representation (YTY) of the Householder product.
- * Stores matrices Y (m x n) and T (n x n) and number of zeros between main diagonal and subdiagonal parts of the block YTY.
- * Provides overloaded multiplication operator (*) allowing to easily perform the multiplication with a dense vector (Y * (T * (Y' * v)))
- */
+* A dense block of the compressed WY representation (YTY) of the Householder product.
+* Stores matrices Y (m x n) and T (n x n) and number of zeros between main diagonal and subdiagonal parts of the block YTY.
+* Provides overloaded multiplication operator (*) allowing to easily perform the multiplication with a dense vector (Y * (T * (Y' * v)))
+*/
 template <typename ScalarType, typename IndexType>
 class BlockYTY {
 	typedef Eigen::Matrix<ScalarType, Eigen::Dynamic, Eigen::Dynamic> MatrixType;
@@ -73,7 +73,7 @@ public:
 	VectorType multTransposed(const VectorType &other) const {
 		return (this->matY * (this->matT.transpose() * (this->matY.transpose() * other)));
 	}
-	
+
 	VectorType operator*(const VectorType &other) const {
 		return (this->matY * (this->matT * (this->matY.transpose() * other)));
 	}
@@ -86,10 +86,10 @@ private:
 };
 
 /*
- * Storage type for general sparse matrix with block structure.
- * Each element holds block position (row index, column index) and the values in the block stored in ValueType.
- * ValueType is a template type and can generally represent any datatype, both default and user defined.
- */
+* Storage type for general sparse matrix with block structure.
+* Each element holds block position (row index, column index) and the values in the block stored in ValueType.
+* ValueType is a template type and can generally represent any datatype, both default and user defined.
+*/
 template <typename ValueType, typename IndexType>
 class SparseBlockCOO {
 public:
@@ -109,7 +109,7 @@ public:
 	};
 	typedef std::vector<Element> ElementsVec;
 
-	SparseBlockCOO() 
+	SparseBlockCOO()
 		: nRows(0), nCols(0) {
 	}
 
@@ -123,6 +123,10 @@ public:
 
 	IndexType size() const {
 		return this->elems.size();
+	}
+
+	void clear() {
+		this->elems.clear();
 	}
 
 	Element& operator[](IndexType i) {
