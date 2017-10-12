@@ -279,6 +279,7 @@ ADD_EXECUTABLE(Eigen_Pull_Request_FitEllipse
 	Eigen_pull/SparseBlockAngularQR.h
 	Eigen_pull/SparseBandedBlockedQR.h
 	Eigen_pull/SparseBlockCOO.h
+	Eigen_pull/BlockDiagonalSparseQR.h
 	)
 
 TARGET_LINK_LIBRARIES(QR_Solver_Test ${OSD_LIB} ${SSP_LIB})

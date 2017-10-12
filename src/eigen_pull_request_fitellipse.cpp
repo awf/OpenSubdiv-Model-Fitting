@@ -26,7 +26,8 @@
 #include <unsupported/Eigen/SparseExtra>
 
 #include "unsupported/Eigen/src/SparseExtra/BlockSparseQR.h"
-#include "unsupported/Eigen/src/SparseExtra/BlockDiagonalSparseQR.h"
+//#include "unsupported/Eigen/src/SparseExtra/BlockDiagonalSparseQR.h"
+#include "Eigen_pull/BlockDiagonalSparseQR.h"
 
 #include "Logger.h"
 
