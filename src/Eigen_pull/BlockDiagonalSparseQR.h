@@ -43,7 +43,7 @@ class BlockDiagonalSparseQR : public SparseSolverBase<BlockDiagonalSparseQR<_Mat
 
     typedef SparseMatrix<Scalar, RowMajor, StorageIndex> MatrixQType;
     typedef SparseMatrix<Scalar, ColMajor, StorageIndex> MatrixRType;
-    typedef PermutationMatrix<Dynamic, Dynamic, Index> PermutationType;
+    typedef PermutationMatrix<Dynamic, Dynamic, StorageIndex> PermutationType;
 
     enum {
       ColsAtCompileTime = MatrixType::ColsAtCompileTime,
@@ -132,6 +132,16 @@ class BlockDiagonalSparseQR : public SparseSolverBase<BlockDiagonalSparseQR<_Mat
     */
     MatrixQType matrixQ() const
     { return m_Q; }
+
+	/**
+	 * \returns a const reference to the row permutation P that was applied to A such that P * A = Q * R
+	 * Added for compatibility with other solvers.
+	 * This solver does not perform any row permutations and so P will always be identity.
+	 */
+	const PermutationType& rowsPermutation() const {
+		eigen_assert(m_isInitialized && "Decomposition is not initialized.");
+		return m_rowPerm;
+	}
 
     /** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
       * It is the combination of the fill-in reducing permutation and numerical column pivoting.
@@ -235,6 +245,7 @@ class BlockDiagonalSparseQR : public SparseSolverBase<BlockDiagonalSparseQR<_Mat
     ScalarVector m_hcoeffs;         // The Householder coefficients
 
     PermutationType m_outputPerm_c; // The final column permutation
+	PermutationType m_rowPerm;		// Row permutation matrix, always identity as solver does not perform row permutations
 
 
     Index m_nonzeropivots;          // Number of non zero pivots found
@@ -269,6 +280,11 @@ void BlockDiagonalSparseQR<MatrixType,BlockQRSolver>::analyzePattern(const Matri
 
   m_outputPerm_c.resize(n);
   m_outputPerm_c.indices().setLinSpaced(n, 0, n - 1);
+  
+  Index m = mat.rows();
+
+  m_rowPerm.resize(m);
+  m_rowPerm.indices().setLinSpaced(m, 0, m - 1);
 
   assert(_CrtCheckMemory());
 }
