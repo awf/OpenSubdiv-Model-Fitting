@@ -78,7 +78,8 @@ LevenbergMarquardt<FunctorType>::minimizeOneStep(InputType &x)
   /* form (q transpose)*m_fvec and store the first n components in */
   /* m_qtf. */
   {
-    m_qtf = (m_qrfac.matrixQ().adjoint() * m_fvec).head(n);
+	  m_wa4 = (m_qrfac.matrixQ().adjoint() * m_fvec);
+    m_qtf = m_wa4.head(n);
   }
 
   /* compute the norm of the scaled gradient. */

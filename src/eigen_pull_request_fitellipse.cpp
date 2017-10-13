@@ -41,8 +41,6 @@ typedef SuiteSparse_long IndexType;
 typedef SparseMatrix<Scalar, ColMajor, IndexType> JacobianType;
 typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
 
-#define LM_VERBOSE 0
-
 template <typename _Scalar>
 struct EllipseFitting : SparseFunctor<_Scalar, IndexType>
 {
@@ -92,7 +90,7 @@ struct EllipseFitting : SparseFunctor<_Scalar, IndexType>
 		double b = params[1];
 		double r = params[4];
 
-		TripletArray<JacobianType::Scalar> triplets(npoints * 2 * 5); // npoints * rows_per_point * nonzeros_per_row
+		TripletArray<JacobianType::Scalar, IndexType> triplets(npoints * 2 * 5); // npoints * rows_per_point * nonzeros_per_row
 		for (int i = 0; i < npoints; i++) {
 			double t = uv(i);
 			triplets.add(2 * i, i, +a*cos(r)*sin(t) + b*sin(r)*cos(t));
@@ -246,9 +244,11 @@ void initializeParams(int nDataPoints, const Matrix2Xd &ellipsePoints, double in
 	}
 }
 
+#define LM_VERBOSE 0
+
 const int NumTests = 8;
 const int SparseQR_LimitN = 2000;
-const int SPQR_LimitN = 0; // For some reason it is failing to converge -> ruled out for now...
+const int SPQR_LimitN = 500000; // For some reason it is failing to converge -> ruled out for now...
 int NumSamplePoints[NumTests] = {500, 1000, 2000, 5000, 10000, 50000, 100000, 500000};
 
 int main() {
@@ -261,7 +261,7 @@ int main() {
 	std::cout << "#####################################################################" << std::endl;
 	std::cout << "N - Number of data points" << std::endl;
 	std::cout << "Sparse QR - Eigen's Sparse QR" << std::endl;
-	std::cout << "SPQR - SuiteSparse QR" << std::endl;
+	std::cout << "SuiteSparse QR - SuiteSparse QR" << std::endl;
 	std::cout << "Bl Diag Sp QR - Block Diagonal Sparse QR" << std::endl;
 	std::cout << "Sp Band Bl QR - Sparse Banded Blocked QR" << std::endl;
 	std::cout << "#####################################################################" << std::endl;
@@ -332,7 +332,7 @@ int main() {
 			begin = clock();
 			info = lm2.minimize(params);
 			duration = double(clock() - begin) / CLOCKS_PER_SEC;
-			std::cout << "SPQR:\t";
+			std::cout << "SuiteSparse QR:\t";
 			printParams(params, nDataPoints, duration);
 		}
 		
