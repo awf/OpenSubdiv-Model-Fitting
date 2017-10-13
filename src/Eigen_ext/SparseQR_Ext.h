@@ -649,7 +649,7 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
 	res = m_other;
 
 	// FixMe: Better estimation of nonzeros?
-	Eigen::TripletArray<Scalar, typename MatrixType::Index> resVals(Index(res.rows() * res.cols() * 0.1));
+	Eigen::TripletArray<Scalar, typename MatrixType::Index> resVals(Index(resTmp.rows() * resTmp.cols() * 0.1));
 
 	SparseVector resColJ;
 	const Scalar Zero = Scalar(0);
@@ -699,7 +699,7 @@ struct SparseQR_Ext_QProduct : ReturnByValue<SparseQR_Ext_QProduct<SparseQR_ExtT
     }
 
 	res.setFromTriplets(resVals.begin(), resVals.end());
-	res.prune(Scalar(m_qr.m_sqrtEps), m_qr.m_sqrtEps);
+	res.prune(Scalar(0));
 	res.makeCompressed();
   }
   const SparseQR_ExtType& m_qr;

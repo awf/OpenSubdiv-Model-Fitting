@@ -283,9 +283,11 @@ int main() {
 	Eigen::LevenbergMarquardt< Functor > lm(functor);
 	lm.setVerbose(true);
 
+	clock_t begin = clock();
 	Eigen::LevenbergMarquardtSpace::Status info = lm.minimize(params);
+	std::cout << "Elapsed:   " << double(clock() - begin) / CLOCKS_PER_SEC << "s\n";
 
-	std::cout << "END[" << info << "]";
+	std::cout << "END[" << info << "] ";
 	std::cout << "a=" << params(ellipsePoints.cols()) << "\t";
 	std::cout << "b=" << params(ellipsePoints.cols() + 1) << "\t";
 	std::cout << "x0=" << params(ellipsePoints.cols() + 2) << "\t";

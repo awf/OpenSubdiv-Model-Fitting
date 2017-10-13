@@ -105,10 +105,10 @@ void MeshTopology::update_adjacencies() {
 
 Eigen::Vector3f MeshTopology::computeBarycenter(const Matrix3X &vertices) {
 	Eigen::Vector3f b;
-	b << vertices.col(0).sum() / vertices.rows(),
-		vertices.col(1).sum() / vertices.rows(),
-		vertices.col(2).sum() / vertices.rows();
-
+	b << (vertices.row(0).maxCoeff() + vertices.row(0).minCoeff()) / 2.0,
+		(vertices.row(1).maxCoeff() + vertices.row(1).minCoeff()) / 2.0,
+		(vertices.row(2).maxCoeff() + vertices.row(2).minCoeff()) / 2.0;
+	
 	return b;
 }
 

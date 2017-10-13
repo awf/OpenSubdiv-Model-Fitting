@@ -635,25 +635,6 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 0, this->eWeights.normals * (dRdv(2, 0) * normal(0) + dRdv(5, 0) * normal(1) + dRdv(8, 0) * normal(2)));
 			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 1, this->eWeights.normals * (dRdv(2, 1) * normal(0) + dRdv(5, 1) * normal(1) + dRdv(8, 1) * normal(2)));
 			jvals.add(rowOffset + this->rowStride * i + blockOffset + 2, r_base + 2, this->eWeights.normals * (dRdv(2, 2) * normal(0) + dRdv(5, 2) * normal(1) + dRdv(8, 2) * normal(2)));
-/*
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 0) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(6, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 1) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(6, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 0, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(0, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(3, 2) * normal(1)
-				+ x.rigidTransf.params().s3 *  dRdv(6, 2) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(1, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 0) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(7, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(1, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 1) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(7, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 1, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(1, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(4, 2) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(7, 2) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 0, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 0) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 0) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(8, 0) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 1, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 1) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 1) * normal(1)
-				+ x.rigidTransf.params().s3 *  dRdv(8, 1) * normal(2)));
-			jvals.add(this->rowStride * i + rowOffset + 2, r_base + 2, this->eWeights.normals * (x.rigidTransf.params().s1 * dRdv(2, 2) * normal(0) + x.rigidTransf.params().s2 * dRdv(5, 2) * normal(1)
-				+ x.rigidTransf.params().s3 * dRdv(8, 2) * normal(2)));*/
 		}
 	}
 
@@ -769,10 +750,6 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 		for (int i = 0; i < this->nDataPoints() - 1; i++) {
 			this->uv_distance(x.control_vertices, x.us.at(i), x.us.at((i + 1) % this->nDataPoints()), &dist_duv);
 
-			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 0, dist_duv(0));	// u1
-			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
-			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
-			//jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 3, dist_duv(3));	// v2
 			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 0, dist_duv(0));	// u1
 			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 2, dist_duv(2));	// u2
 			jvals.add(rowOffset + this->rowStride * i + blockOffset + 0, colBase + 2 * i + 1, dist_duv(1));	// v1
@@ -822,12 +799,13 @@ struct BaseFunctor : Eigen::SparseFunctor<Scalar, SparseDataType> {
 		float s2 = x->rigidTransf.params().s2 + sNew(1);
 		float s3 = x->rigidTransf.params().s3 + sNew(2);
 		x->rigidTransf.setScaling(s1, s2, s3);
+
 		// Increment rotation parameters
 		Vector3 rNew = p.segment<3>(r_base);
 		float r1 = x->rigidTransf.params().r1 + rNew(0);
 		float r2 = x->rigidTransf.params().r2 + rNew(1);
 		float r3 = x->rigidTransf.params().r3 + rNew(2);
-		x->rigidTransf.setRotation(r1, r2, r3);
+		//x->rigidTransf.setRotation(r1, r2, r3);
 	}
 };
 
