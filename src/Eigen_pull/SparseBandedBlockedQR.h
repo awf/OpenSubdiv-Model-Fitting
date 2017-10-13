@@ -128,7 +128,7 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBandedBlockedQR() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading)
+		SparseBandedBlockedQR() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading), m_hasRowPermutation(false)
 		{ }
 
 		/** Construct a QR factorization of the matrix \a mat.
@@ -137,7 +137,7 @@ namespace Eigen {
 		*
 		* \sa compute()
 		*/
-		explicit SparseBandedBlockedQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading)
+		explicit SparseBandedBlockedQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading), m_hasRowPermutation(false)
 		{
 			compute(mat);
 		}
@@ -237,6 +237,14 @@ namespace Eigen {
 			return this->m_rowPerm;
 		}
 
+		/**
+		* \returns a flag indicating whether the factorization introduced some row permutations
+		* It is determined during the input pattern analysis step.
+		*/
+		bool hasRowPermutation() const {
+			return this->m_hasRowPermutation;
+		}
+
 		/** \returns A string describing the type of error.
 		* This method is provided to ease debugging, not to handle errors.
 		*/
@@ -328,6 +336,7 @@ namespace Eigen {
 		bool m_useDefaultThreshold;     // Use default threshold
 		Index m_nonzeropivots;          // Number of non zero pivots found
 		bool m_useMultiThreading;		// Use multithreaded implementation of Householder product evaluation
+		bool m_hasRowPermutation;		// Row permutation performed during the factorization
 
 										/*
 										* Structures filled during sparse matrix pattern analysis.
@@ -422,10 +431,17 @@ namespace Eigen {
 
 		/******************************************************************/
 		// 2) Sort the rows to form as-banded-as-possible matrix
-		std::sort(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
+		// Set an indicator whether row sorting is needed
+		this->m_hasRowPermutation = !std::is_sorted(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
 			return (lhs.start < rhs.start);
 		});
-	
+		// Perform the actual row sorting if needed
+		if(this->m_hasRowPermutation) {
+			std::sort(rowRanges.begin(), rowRanges.end(), [](const MatrixRowRange &lhs, const MatrixRowRange &rhs) {
+				return (lhs.start < rhs.start);
+			});
+		}
+			
 		/******************************************************************/
 		// 3) Search for banded blocks (blocks of row sharing same/similar band)		
 		MatrixType::StorageIndex maxColStep = 0;

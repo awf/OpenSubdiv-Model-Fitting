@@ -143,6 +143,14 @@ class BlockDiagonalSparseQR : public SparseSolverBase<BlockDiagonalSparseQR<_Mat
 		return m_rowPerm;
 	}
 
+	/**
+	 * \returns a flag indicating whether the factorization introduced some row permutations
+	 * As this factorization doesn't do row permutations, it always returns false.
+	 */
+	bool hasRowPermutation() const {
+		return false;
+	}
+
     /** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
       * It is the combination of the fill-in reducing permutation and numerical column pivoting.
       */
@@ -229,7 +237,7 @@ class BlockDiagonalSparseQR : public SparseSolverBase<BlockDiagonalSparseQR<_Mat
     }
 
 
-    void setSparseBlockParams(int blocksRows, int blocksCols) {
+    void setSparseBlockParams(Index blocksRows, Index blocksCols) {
         m_blocksRows = blocksRows;
         m_blocksCols = blocksCols;
     }
@@ -252,8 +260,8 @@ class BlockDiagonalSparseQR : public SparseSolverBase<BlockDiagonalSparseQR<_Mat
     IndexVector m_etree;            // Column elimination tree
     IndexVector m_firstRowElt;      // First element in each row
 
-    int m_blocksRows;               // Rows of each subblock in the diagonal
-    int m_blocksCols;               // Cols of each subblock in the diagonal
+    Index m_blocksRows;               // Rows of each subblock in the diagonal
+	Index m_blocksCols;               // Cols of each subblock in the diagonal
 
     template <typename, typename > friend struct SparseQR_QProduct;
 
@@ -276,12 +284,12 @@ void BlockDiagonalSparseQR<MatrixType,BlockQRSolver>::analyzePattern(const Matri
   /// Check block structure is valid
   eigen_assert( mat.rows()%m_blocksRows == mat.cols()%m_blocksCols && mat.rows()/m_blocksRows == mat.cols()/m_blocksCols && mat.cols()%m_blocksCols == 0);
 
-  Index n = mat.cols();
+  StorageIndex n = mat.cols();
 
   m_outputPerm_c.resize(n);
   m_outputPerm_c.indices().setLinSpaced(n, 0, n - 1);
   
-  Index m = mat.rows();
+  StorageIndex m = mat.rows();
 
   m_rowPerm.resize(m);
   m_rowPerm.indices().setLinSpaced(m, 0, m - 1);
@@ -305,7 +313,7 @@ void BlockDiagonalSparseQR<MatrixType,BlockQRSolver>::factorize(const MatrixType
     eigen_assert( mat.rows()%m_blocksRows == mat.cols()%m_blocksCols && 
                   mat.rows()/m_blocksRows == mat.cols()/m_blocksCols && 
                   mat.cols()%m_blocksCols == 0);
-    int nBlocks = int(mat.rows( )/m_blocksRows);
+	Index nBlocks = Index(mat.rows( )/m_blocksRows);
 
 #ifndef EIGEN_NO_DEBUG
     /// Check mat is block diagonal with stated dimensions
@@ -327,13 +335,13 @@ void BlockDiagonalSparseQR<MatrixType,BlockQRSolver>::factorize(const MatrixType
     m_Q.resize(mat.rows(), mat.rows());
     m_Q.reserve(nBlocks * m_blocksRows * m_blocksRows);
     
-    int rank = 0;
-    for(int i=0, currRow=0, currCol=0; i<nBlocks; i++, currRow += m_blocksRows, currCol += m_blocksCols) {
+    Index rank = 0;
+    for(Index i=0, currRow=0, currCol=0; i<nBlocks; i++, currRow += m_blocksRows, currCol += m_blocksCols) {
 
         // Copy block into a temporary
         BlockMatrixType block_i(m_blocksRows, m_blocksCols);
-        for(int j=0; j<m_blocksRows; j++) {
-            for(int k=0; k<m_blocksCols; k++) {
+        for(Index j=0; j<m_blocksRows; j++) {
+            for(Index k=0; k<m_blocksCols; k++) {
                 block_i.coeffRef(j,k) = mat.coeff(currRow+j, currCol+k);
 			}
 		}
@@ -357,22 +365,22 @@ void BlockDiagonalSparseQR<MatrixType,BlockQRSolver>::factorize(const MatrixType
           auto base_row = i * m_blocksRows;
           auto base_col = i * m_blocksCols;
           // Q
-          for (int j = 0; j < m_blocksRows; j++) {
+          for (Index j = 0; j < m_blocksRows; j++) {
             m_Q.startVec(base_row + j);
             // Us
-            for (int k = 0; k < m_blocksCols; k++) {
+            for (Index k = 0; k < m_blocksCols; k++) {
               m_Q.insertBack(base_row + j, base_col + k) =  Qi.coeff(j, k);
 			}
             // Ns
-            for (int k = 0; k < m1; k++) {
+            for (Index k = 0; k < m1; k++) {
               m_Q.insertBack(base_row + j, N_start + i * m1 + k) = Qi.coeff(j, m_blocksCols + k);
 			}
           }
 
           // R
           // Only the top cxc of R is nonzero, so c rows at a time
-          for (int j = 0; j < m_blocksCols; j++) {
-            for (int k = j; k < m_blocksCols; k++) {
+          for (Index j = 0; j < m_blocksCols; j++) {
+            for (Index k = j; k < m_blocksCols; k++) {
               tripletsR.add(base_col + j, base_col + k, Ri.coeff(j, k));
 			}
 		  }
@@ -398,7 +406,7 @@ void BlockDiagonalSparseQR<MatrixType,BlockQRSolver>::factorize(const MatrixType
         }
          
         // fill cols permutation
-        for(int j = 0; j < m_blocksCols; j++) {
+        for(Index j = 0; j < m_blocksCols; j++) {
             m_outputPerm_c.indices()(i * m_blocksCols + j, 0) = i * m_blocksCols + blockSolver.colsPermutation().indices()(j, 0);
 		}
     }

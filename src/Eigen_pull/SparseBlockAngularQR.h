@@ -316,11 +316,11 @@ namespace Eigen {
 	{
 		eigen_assert(mat.isCompressed() && "SparseQR requires a sparse matrix in compressed mode. Call .makeCompressed() before passing it to SparseQR");
 
-		Index n = mat.cols();
+		StorageIndex n = mat.cols();
 		m_outputPerm_c.resize(n);
 		m_outputPerm_c.indices().setLinSpaced(n, 0, StorageIndex(n - 1));
 
-		Index m = mat.rows();
+		StorageIndex m = mat.rows();
 		m_rowPerm.resize(m);
 		m_rowPerm.indices().setLinSpaced(m, 0, StorageIndex(m - 1));
 	}
@@ -363,7 +363,9 @@ namespace Eigen {
 
 		// '(Eigen::SparseQRMatrixQTransposeReturnType<SparseQRType>, const Eigen::Block<const Derived,-1,-1,true>)'
 		MatrixType XX = matBlock.rightCols(m2); // awf fixme this needs to be inlined in the next line
-		XX = m_leftSolver.rowsPermutation() * XX;
+		if(m_leftSolver.hasRowPermutation()) {
+			XX = m_leftSolver.rowsPermutation() * XX;
+		}
 		MatrixType A = m_leftSolver.matrixQ().transpose() * XX;//
 		
 		/// A = | Atop |      m1 x m2
@@ -426,8 +428,10 @@ namespace Eigen {
 		// fill rows permutation
 		// Top block will use row permutation from the left solver
 		// Bottom block is not permuted - no change of indices needed
-		for (Index j = 0; j < n1; j++) {
-			m_rowPerm.indices()(j, 0) = m_leftSolver.rowsPermutation().indices()(j, 0);
+		if(m_leftSolver.hasRowPermutation()) {
+			for (Index j = 0; j < n1; j++) {
+				m_rowPerm.indices()(j, 0) = m_leftSolver.rowsPermutation().indices()(j, 0);
+			}
 		}
 
 		m_nonzeropivots = m_leftSolver.rank() + m_rightSolver.rank();
