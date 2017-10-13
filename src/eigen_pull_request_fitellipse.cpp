@@ -22,7 +22,12 @@
 #include "Eigen_pull/SparseBlockAngularQR.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
-#include <unsupported/Eigen/LevenbergMarquardt>
+//#include <unsupported/Eigen/LevenbergMarquardt>
+#include "Eigen_pull/LevenbergMarquardt/LMqrsolv.h"
+#include "Eigen_pull/LevenbergMarquardt/LMcovar.h"
+#include "Eigen_pull/LevenbergMarquardt/LMpar.h"
+#include "Eigen_pull/LevenbergMarquardt/LevenbergMarquardt.h"
+#include "Eigen_pull/LevenbergMarquardt/LMonestep.h"
 #include <unsupported/Eigen/SparseExtra>
 
 #include "unsupported/Eigen/src/SparseExtra/BlockSparseQR.h"

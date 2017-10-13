@@ -269,6 +269,12 @@ ADD_EXECUTABLE(Eigen_Pull_Request_Test
 	Eigen_pull/SparseBlockAngularQR.h
 	Eigen_pull/SparseBandedBlockedQR.h
 	Eigen_pull/SparseBlockCOO.h
+	Eigen_pull/BlockDiagonalSparseQR.h
+	Eigen_pull/LevenbergMarquardt/LevenbergMarquardt.h
+	Eigen_pull/LevenbergMarquardt/LMcovar.h
+	Eigen_pull/LevenbergMarquardt/LMonestep.h
+	Eigen_pull/LevenbergMarquardt/LMpar.h
+	Eigen_pull/LevenbergMarquardt/LMqrsolv.h
 	)
 
 ADD_EXECUTABLE(Eigen_Pull_Request_FitEllipse
@@ -280,6 +286,11 @@ ADD_EXECUTABLE(Eigen_Pull_Request_FitEllipse
 	Eigen_pull/SparseBandedBlockedQR.h
 	Eigen_pull/SparseBlockCOO.h
 	Eigen_pull/BlockDiagonalSparseQR.h
+	Eigen_pull/LevenbergMarquardt/LevenbergMarquardt.h
+	Eigen_pull/LevenbergMarquardt/LMcovar.h
+	Eigen_pull/LevenbergMarquardt/LMonestep.h
+	Eigen_pull/LevenbergMarquardt/LMpar.h
+	Eigen_pull/LevenbergMarquardt/LMqrsolv.h
 	)
 
 TARGET_LINK_LIBRARIES(QR_Solver_Test ${OSD_LIB} ${SSP_LIB})
