@@ -147,7 +147,7 @@ struct EllipseFitting : SparseFunctor<_Scalar, int>
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
 
 	// QR for J is concatenation of the above.
-	typedef BlockSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
+	typedef SparseBlockAngularQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 
 	typedef SchurlikeQRSolver QRSolver;
 
@@ -156,7 +156,7 @@ struct EllipseFitting : SparseFunctor<_Scalar, int>
 		// set block size
 		qr.getLeftSolver().setSparseBlockParams(2, 1);
 		//qr.getLeftSolver().setSparseBlockParams(16, 8);
-		qr.setBlockParams(ellipsePoints.cols() * 2, ellipsePoints.cols());
+		qr.setSparseBlockParams(ellipsePoints.cols() * 2, ellipsePoints.cols());
 	}
 	//void initQRSolver(GeneralQRSolver &qr) {}
 	//*/
@@ -173,6 +173,7 @@ struct EllipseFitting : SparseFunctor<_Scalar, int>
 
 	void initQRSolver(BlockAngularQRSolver &qr) {
 		// set left block size
+		qr.getLeftSolver().setPattern(ellipsePoints.cols() * 2, ellipsePoints.cols(), 2, 1, 0);
 		qr.setSparseBlockParams(ellipsePoints.cols() * 2, ellipsePoints.cols());
 	}
 	//*/

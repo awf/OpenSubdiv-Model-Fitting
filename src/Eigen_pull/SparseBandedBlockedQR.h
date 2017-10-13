@@ -163,7 +163,7 @@ namespace Eigen {
 			m_blocksYT.clear();
 			factorize(mat);
 		}
-		//void setPattern(const MatrixType::StorageIndex blockRows, const MatrixType::StorageIndex blockCols, const MatrixType::StorageIndex blockOverlap);
+		void setPattern(const StorageIndex matRows, const StorageIndex matCols, const StorageIndex blockRows, const StorageIndex blockCols, const StorageIndex blockOverlap);
 		void analyzePattern(const MatrixType& mat);
 		void factorize(const MatrixType& mat);
 
@@ -347,6 +347,7 @@ namespace Eigen {
 
 		template <typename, typename > friend struct SparseBandedBlockedQR_QProduct;
 
+		void mergeBlocks(BlockInfoMapOrder &blockOrder, BlockInfoMap &blockMap, const StorageIndex maxColStep);
 	};
 
 	/*
@@ -371,10 +372,100 @@ namespace Eigen {
 	};
 
 	/*
+	 * Helper function going through a block map and looking for a possibility to merge several blocks together
+	 * in order to obtain better dense block sizes for the YTY representation.
+	 */
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
-	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::setPattern(const MatrixType::StorageIndex blockRows, const MatrixType::StorageIndex blockCols, const MatrixType::StorageIndex blockOverlap) {
-		// ToDo: jasvob
-	}*/
+	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::mergeBlocks(BlockInfoMapOrder &blockOrder, BlockInfoMap &blockMap, const StorageIndex maxColStep) {
+		BlockInfoMap newBlockMap;
+		BlockInfoMapOrder newBlockOrder;
+		MatrixBlockInfo firstBlock;
+		MatrixType::StorageIndex prevBlockEndCol = 0;
+		MatrixType::StorageIndex sumRows = 0;
+		MatrixType::StorageIndex numCols = 0;
+		MatrixType::StorageIndex colStep = 0;
+		auto it = blockOrder.begin();
+		for (; it != blockOrder.end(); ++it) {
+			if (sumRows == 0) {
+				firstBlock = blockMap.at(*it);
+			}
+
+			sumRows += blockMap.at(*it).numRows;
+			numCols = (blockMap.at(*it).colIdx + blockMap.at(*it).numCols) - firstBlock.colIdx;
+			colStep = blockMap.at(*it).colIdx - firstBlock.colIdx;
+
+			if ((newBlockOrder.empty() || colStep >= maxColStep / 2 - 1) && sumRows > numCols && numCols >= SuggestedBlockCols) {
+				newBlockOrder.push_back(firstBlock.colIdx);
+				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
+
+				sumRows = 0;
+				prevBlockEndCol = firstBlock.colIdx + numCols;
+			}
+		}
+		// Process also last collection
+		--it;
+		if (sumRows > 0) {
+			colStep = blockMap.at(*it).colIdx - firstBlock.colIdx;
+
+			if (colStep >= maxColStep / 2 && sumRows > numCols && numCols >= SuggestedBlockCols) {
+				newBlockOrder.push_back(firstBlock.colIdx);
+				int numCols = (blockMap.at(*it).colIdx + blockMap.at(*it).numCols) - firstBlock.colIdx;
+				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
+			}
+			else {
+				firstBlock = newBlockMap[newBlockOrder.back()];
+				int numCols = (blockMap.at(*it).colIdx + blockMap.at(*it).numCols) - firstBlock.colIdx;
+				newBlockMap[newBlockOrder.back()] = MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, firstBlock.numRows + sumRows, numCols);
+			}
+		}
+
+		// Save the final banded block structure that will be used during the factorization process.
+		blockOrder = newBlockOrder;
+		blockMap = newBlockMap;
+	}
+
+	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
+	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::setPattern(const StorageIndex matRows, const StorageIndex matCols, 
+		const StorageIndex blockRows, const StorageIndex blockCols, const StorageIndex blockOverlap) {
+		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
+		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
+		typedef SparseMatrix<Scalar, RowMajor, MatrixType::StorageIndex> RowMajorMatrixType;
+
+		Index n = matCols;
+		Index m = matRows;
+		Index diagSize = (std::min)(m, n);
+
+		// In case we know the pattern, rows are already sorted, no permutation needed
+		this->m_hasRowPermutation = false;
+		this->m_rowPerm.resize(m);
+		this->m_rowPerm.setIdentity();
+
+		/******************************************************************/
+		// 1) Set the block map based on block paramters passed ot this method	
+		MatrixType::StorageIndex maxColStep = blockCols - blockOverlap;
+		MatrixType::StorageIndex numBlocks = n / maxColStep;
+		this->m_blockMap.clear();
+		this->m_blockOrder.clear();
+		MatrixType::StorageIndex rowIdx = 0;
+		MatrixType::StorageIndex colIdx = 0;
+		for (int i = 0; i < numBlocks; i++) {
+			rowIdx = i * blockRows;
+			colIdx = i * maxColStep;
+			this->m_blockOrder.push_back(colIdx);
+			this->m_blockMap.insert(std::make_pair(colIdx, MatrixBlockInfo(rowIdx, colIdx, blockRows, blockCols)));
+		}
+
+		/******************************************************************/
+		// 2) Go through the estimated block structure
+		// And merge several blocks together if needed/possible in order to form reasonably big banded blocks
+		this->mergeBlocks(this->m_blockOrder, this->m_blockMap, maxColStep);
+
+		/******************************************************************/
+		// 3) Finalize
+		m_R.resize(matRows, matCols);
+
+		m_analysisIsok = true;
+	}
 
 	/** \brief Preprocessing step of a QR factorization
 	*
@@ -474,56 +565,10 @@ namespace Eigen {
 		/******************************************************************/
 		// 4) Go through the estimated block structure
 		// And merge several blocks together if needed/possible in order to form reasonably big banded blocks
-		BlockInfoMap newBlockMap;
-		BlockInfoMapOrder newBlockOrder;
-		MatrixBlockInfo firstBlock;
-		MatrixType::StorageIndex prevBlockEndCol = 0;
-		MatrixType::StorageIndex sumRows = 0;
-		MatrixType::StorageIndex numCols = 0;
-		MatrixType::StorageIndex colStep = 0;
-		MatrixType::StorageIndex blockOverlap = 0;
-		auto it = this->m_blockOrder.begin();
-		for (; it != this->m_blockOrder.end(); ++it) {
-			if (sumRows == 0) {
-				firstBlock = this->m_blockMap.at(*it);
-			}
-
-			sumRows += this->m_blockMap.at(*it).numRows;
-			numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
-			colStep = this->m_blockMap.at(*it).colIdx - firstBlock.colIdx;
-
-			if ((newBlockOrder.empty() || colStep >= maxColStep / 2 - 1) && sumRows > numCols && numCols >= SuggestedBlockCols) {
-				newBlockOrder.push_back(firstBlock.colIdx);
-				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
-
-				sumRows = 0;
-				prevBlockEndCol = firstBlock.colIdx + numCols;
-			}
-		}
-		// Process also last collection
-		--it;
-		if (sumRows > 0) {
-			colStep = this->m_blockMap.at(*it).colIdx - firstBlock.colIdx;
-
-			if (colStep >= maxColStep / 2 && sumRows > numCols && numCols >= SuggestedBlockCols) {
-				newBlockOrder.push_back(firstBlock.colIdx);
-				int numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
-				newBlockMap.insert(std::make_pair(firstBlock.colIdx, MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, sumRows, numCols)));
-			}
-			else {
-				firstBlock = newBlockMap[newBlockOrder.back()];
-				int numCols = (this->m_blockMap.at(*it).colIdx + this->m_blockMap.at(*it).numCols) - firstBlock.colIdx;
-				newBlockMap[newBlockOrder.back()] = MatrixBlockInfo(firstBlock.rowIdx, firstBlock.colIdx, firstBlock.numRows + sumRows, numCols);
-			}
-		}
+		this->mergeBlocks(this->m_blockOrder, this->m_blockMap, maxColStep);
 
 		/******************************************************************/
-		// 5) Save the final banded block structure that will be used during the factorization process.
-		this->m_blockOrder = newBlockOrder;
-		this->m_blockMap = newBlockMap;
-
-		MatrixType::StorageIndex numBlocks = this->m_blockOrder.size();
-
+		// 5) Finalize
 		m_R.resize(mat.rows(), mat.cols());
 
 		m_analysisIsok = true;
