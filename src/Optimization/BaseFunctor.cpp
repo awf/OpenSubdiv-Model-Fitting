@@ -181,7 +181,7 @@ template <int BlkRows, int BlkCols>
 void BaseFunctor<BlkRows, BlkCols>::initQRSolver(SchurlikeQRSolver &qr) {
 	// set block size
 	qr.setSparseBlockParams(data_points.cols() * BlkRows, data_points.cols() * BlkCols);
-	qr.getLeftSolver().setRoundoffEpsilon(1e-10);
+	qr.getLeftSolver().setRoundoffEpsilon(1e-16);
 	qr.getLeftSolver().setBlockParams(BlkRows, BlkCols);
 	//qr.getLeftSolver().setDiagBlockParams(data_points.cols() * 3, data_points.cols() * 2);
 	//qr.getLeftSolver().getDiagSolver().setSparseBlockParams(BlkRows, BlkCols);

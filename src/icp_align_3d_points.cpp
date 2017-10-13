@@ -16,18 +16,11 @@
 #include "BezierPatch.h"
 #include "RigidTransform.h"
 
-#include "Optimization/PosOnlyFunctor.h"
-#include "Optimization/PosOnlyWithRegFunctor.h"
-#include "Optimization/PosAndNormalsFunctor.h"
-#include "Optimization/PosAndNormalsWithRegFunctor.h"
+#include "Optimization/ICPFunctor.h"
 
-//typedef PosOnlyFunctor OptimizationFunctor;
-typedef PosOnlyWithRegFunctor OptimizationFunctor;
-//typedef PosAndNormalsFunctor OptimizationFunctor;
-//typedef PosAndNormalsWithRegFunctor OptimizationFunctor;
+typedef ICPFunctor OptimizationFunctor;
 
 using namespace Eigen;
-
 
 void logmesh(log3d& log, MeshTopology const& mesh, Matrix3X const& vertices) {
 	Matrix3Xi tris(3, mesh.quads.cols() * 2);
@@ -179,32 +172,8 @@ int main() {
 
 	// INITIAL PARAMS
 	OptimizationFunctor::InputType params;
-	params.control_vertices = control_vertices_gt;// +0.1 * MatrixXX::Random(3, control_vertices_gt.cols());
+	params.control_vertices = control_vertices_gt;
 	params.us.resize(nDataPoints);
-	//params.rigidTransf.setTranslation(fpjParse.project().images[0].rigidTransf.params().t1, 
-	//	fpjParse.project().images[0].rigidTransf.params().t2, 
-	//	fpjParse.project().images[0].rigidTransf.params().t3);
-	//Eigen::Vector3f barycenter = plyParse.model().barycenter();
-	Eigen::Vector3f barycenterData = MeshTopology::computeBarycenter(data);
-	Eigen::Vector3f barycenterModel = MeshTopology::computeBarycenter(control_vertices_gt);
-	barycenterModel(0) *= fpjParse.project().images[0].rigidTransf.params().s1 * 2.0;
-	barycenterModel(1) *= fpjParse.project().images[0].rigidTransf.params().s2 * 2.0;
-	barycenterModel(2) *= fpjParse.project().images[0].rigidTransf.params().s3 * 2.0;
-	Eigen::Vector3f barycenterDist = barycenterData - barycenterModel;
-	log.color(1.0, 0.0, 0.0);
-	log.position(log.CreateSphere(0, 0.05), barycenterData(0), barycenterData(1), barycenterData(2));
-	log.color(0.0, 0.0, 1.0);
-	log.position(log.CreateSphere(0, 0.05), barycenterModel(0), barycenterModel(1), barycenterModel(2));
-	params.rigidTransf.setTranslation(barycenterDist(0), barycenterDist(1), barycenterDist(2));
-	params.rigidTransf.setRotation(0.0, 0.0, -M_PI / 2.0);
-	//params.rigidTransf.setRotation(fpjParse.project().images[0].rigidTransf.params().r1,
-	//	fpjParse.project().images[0].rigidTransf.params().r2,
-	//	fpjParse.project().images[0].rigidTransf.params().r3);
-	//params.rigidTransf.setScaling(0.5, 0.5, 0.5);
-	//params.rigidTransf.setScaling(1.0, 10.0, 5.0);
-	params.rigidTransf.setScaling(fpjParse.project().images[0].rigidTransf.params().s1 * 2.0,
-		fpjParse.project().images[0].rigidTransf.params().s2 * 2.0,
-		fpjParse.project().images[0].rigidTransf.params().s3 * 2.0);
 	
 	// Log initialization
 	{
@@ -225,10 +194,7 @@ int main() {
 	// Initialize uvs.
 	initializeUVs(mesh, params, data);
 
-	OptimizationFunctor::DataConstraints constraints;
-	//constraints.push_back(OptimizationFunctor::DataConstraint(0, 1));
-	OptimizationFunctor functor(data, mesh, constraints);
-	//OptimizationFunctor functor(data, dataNormals, mesh, constraints);
+	OptimizationFunctor functor(data, mesh);
 	
 	// Set-up the optimization
 	Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor);
@@ -261,8 +227,7 @@ int main() {
 			params.control_vertices = verts1;
 			// Initialize uvs.
 			initializeUVs(mesh1, params, data);
-			//OptimizationFunctor functor1(data, dataNormals, mesh1, constraints);
-			OptimizationFunctor functor1(data, mesh1, constraints);
+			OptimizationFunctor functor1(data, mesh1);
 			Eigen::LevenbergMarquardt< OptimizationFunctor > lm(functor1);
 			lm.setVerbose(true);
 			lm.setMaxfev(40);

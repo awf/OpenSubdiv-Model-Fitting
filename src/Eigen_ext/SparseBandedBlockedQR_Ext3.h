@@ -423,7 +423,10 @@ void SparseBandedBlockedQR_Ext3<MatrixType, OrderingType>::factorize(const Matri
 		m_denseT.at(i) = T;
 		m_denseY.at(i) = Y;
 		m_idxsY.at(i) = Vector4i(bs, numZeros, activeRows, currBlockCols);
+	//	std::cout << "----\n" << m_idxsY.at(i) << std::endl;
 	
+	//	std::cout << numZeros << std::endl;
+
 		//	std::cout << "--- T ---\n" << T << std::endl;
 		//	std::cout << "--- Y ---\n" << Y << std::endl;
 
@@ -520,7 +523,7 @@ struct SparseBandedBlockedQR_Ext3_QProduct : ReturnByValue<SparseBandedBlockedQR
 	VectorXd resColJd;
 	if (m_transpose)
     {
-		eigen_assert(m_qr.m_Y.rows() == m_other.rows() && "Non conforming object sizes");
+	//	eigen_assert(m_qr.m_Y.rows() == m_other.rows() && "Non conforming object sizes");
 
 #ifdef MULTITHREADED
 		// Compute res = Q' * other column by column using parallel for loop
@@ -608,7 +611,7 @@ struct SparseBandedBlockedQR_Ext3_QProduct : ReturnByValue<SparseBandedBlockedQR
     }
     else
     {
-		eigen_assert(m_qr.m_Y.rows() == m_other.rows() && "Non conforming object sizes");
+//		eigen_assert(m_qr.m_Y.rows() == m_other.rows() && "Non conforming object sizes");
 
 		// Compute res = Q * other column by column using parallel for loop
 #ifdef MULTITHREADED
