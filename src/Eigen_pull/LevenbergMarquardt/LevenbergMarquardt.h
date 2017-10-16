@@ -163,7 +163,6 @@ namespace Eigen {
 		typedef typename JacobianType::StorageIndex StorageIndex;
 		typedef typename JacobianType::RealScalar RealScalar;
 		typedef typename PermutationMatrix<Dynamic, Dynamic, StorageIndex> PermutationType;	
-		typedef Matrix<Scalar, Dynamic, 1> FVectorType;
 		typedef typename FunctorType::InputType InputType;
 		typedef typename FunctorType::ValueType ValueType;
 		typedef typename FunctorType::StepType StepType;
