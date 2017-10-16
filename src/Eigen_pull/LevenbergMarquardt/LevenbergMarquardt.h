@@ -199,7 +199,6 @@ namespace Eigen {
 			m_ftol = sqrt_epsilon();
 			m_xtol = sqrt_epsilon();
 			m_gtol = 0.;
-			m_epsfcn = 0.;
 		}
 
 		/** Sets the verbosity **/
@@ -216,9 +215,6 @@ namespace Eigen {
 
 		/** Sets the step bound for the diagonal shift */
 		void setFactor(RealScalar factor) { m_factor = factor; }
-
-		/** Sets the error precision  */
-		void setEpsilon(RealScalar epsfcn) { m_epsfcn = epsfcn; }
 
 		/** Sets the maximum number of function evaluation */
 		void setMaxfev(Index maxfev) { m_maxfev = maxfev; }
@@ -237,9 +233,6 @@ namespace Eigen {
 
 		/** \returns the step bound for the diagonal shift */
 		RealScalar factor() const { return m_factor; }
-
-		/** \returns the error precision */
-		RealScalar epsilon() const { return m_epsfcn; }
 
 		/** \returns the maximum number of function evaluation */
 		Index maxfev() const { return m_maxfev; }
@@ -319,7 +312,6 @@ namespace Eigen {
 		RealScalar m_ftol; //Tolerance in the norm of the vector function
 		RealScalar m_xtol; // 
 		RealScalar m_gtol; //tolerance of the norm of the error gradient
-		RealScalar m_epsfcn; //
 		Index m_iter; // Number of iterations performed
 		RealScalar m_delta;
 		bool m_useExternalScaling;
