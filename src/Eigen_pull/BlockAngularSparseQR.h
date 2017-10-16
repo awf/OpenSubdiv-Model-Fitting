@@ -11,8 +11,8 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#ifndef EIGEN_SPARSE_BLOCK_ANGULAR_QR_H
-#define EIGEN_SPARSE_BLOCK_ANGULAR_QR_H
+#ifndef EIGEN_BLOCK_ANGULAR_SPARSE_QR_H
+#define EIGEN_BLOCK_ANGULAR_SPARSE_QR_H
 
 #include <algorithm>
 #include <ctime>
@@ -20,15 +20,15 @@
 
 namespace Eigen {
 
-	template < typename MatrixType, typename LeftSolver, typename RightSolver > class SparseBlockAngularQR;
-	template<typename SparseQRType> struct SparseBlockAngularQRMatrixQReturnType;
-	template<typename SparseQRType> struct SparseBlockAngularQRMatrixQTransposeReturnType;
-	template<typename SparseQRType, typename Derived> struct SparseBlockAngularQR_QProduct;
+	template < typename MatrixType, typename LeftSolver, typename RightSolver > class BlockAngularSparseQR;
+	template<typename SparseQRType> struct BlockAngularSparseQRMatrixQReturnType;
+	template<typename SparseQRType> struct BlockAngularSparseQRMatrixQTransposeReturnType;
+	template<typename SparseQRType, typename Derived> struct BlockAngularSparseQR_QProduct;
 
 	namespace internal {
 
 		// traits<SparseQRMatrixQ[Transpose]>
-		template <typename SparseQRType> struct traits<SparseBlockAngularQRMatrixQReturnType<SparseQRType> >
+		template <typename SparseQRType> struct traits<BlockAngularSparseQRMatrixQReturnType<SparseQRType> >
 		{
 			typedef typename SparseQRType::MatrixType ReturnType;
 			typedef typename ReturnType::StorageIndex StorageIndex;
@@ -39,12 +39,12 @@ namespace Eigen {
 			};
 		};
 
-		template <typename SparseQRType> struct traits<SparseBlockAngularQRMatrixQTransposeReturnType<SparseQRType> >
+		template <typename SparseQRType> struct traits<BlockAngularSparseQRMatrixQTransposeReturnType<SparseQRType> >
 		{
 			typedef typename SparseQRType::MatrixType ReturnType;
 		};
 
-		template <typename SparseQRType, typename Derived> struct traits<SparseBlockAngularQR_QProduct<SparseQRType, Derived> >
+		template <typename SparseQRType, typename Derived> struct traits<BlockAngularSparseQR_QProduct<SparseQRType, Derived> >
 		{
 			typedef typename Derived::PlainObject ReturnType;
 		};
@@ -53,7 +53,7 @@ namespace Eigen {
 
 	  /**
 	  * \ingroup SparseQR_Module
-	  * \class SparseBlockAngularQR
+	  * \class BlockAngularSparseQR
 	  * \brief QR factorization of block matrix, specifying subblock solvers
 	  *
 	  * This implementation is restricted to 1x2 block structure, factorizing
@@ -67,11 +67,11 @@ namespace Eigen {
 	  */
 
 	template<typename _MatrixType, typename _BlockQRSolverLeft, typename _BlockQRSolverRight>
-	class SparseBlockAngularQR : public SparseSolverBase<SparseBlockAngularQR<_MatrixType, _BlockQRSolverLeft, _BlockQRSolverRight> >
+	class BlockAngularSparseQR : public SparseSolverBase<BlockAngularSparseQR<_MatrixType, _BlockQRSolverLeft, _BlockQRSolverRight> >
 	{
 	protected:
-		typedef SparseBlockAngularQR<_MatrixType, _BlockQRSolverLeft, _BlockQRSolverRight> this_t;
-		typedef SparseSolverBase<SparseBlockAngularQR<_MatrixType, _BlockQRSolverLeft, _BlockQRSolverRight> > Base;
+		typedef BlockAngularSparseQR<_MatrixType, _BlockQRSolverLeft, _BlockQRSolverRight> this_t;
+		typedef SparseSolverBase<BlockAngularSparseQR<_MatrixType, _BlockQRSolverLeft, _BlockQRSolverRight> > Base;
 		using Base::m_isInitialized;
 	public:
 		using Base::_solve_impl;
@@ -89,7 +89,7 @@ namespace Eigen {
 		typedef Matrix<StorageIndex, Dynamic, 1> IndexVector;
 		typedef Matrix<Scalar, Dynamic, 1> ScalarVector;
 
-		typedef SparseBlockAngularQRMatrixQReturnType<SparseBlockAngularQR> MatrixQType;
+		typedef BlockAngularSparseQRMatrixQReturnType<BlockAngularSparseQR> MatrixQType;
 		typedef SparseMatrix<Scalar> MatrixRType;
 		typedef PermutationMatrix<Dynamic, Dynamic, Index> PermutationType;
 
@@ -99,7 +99,7 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBlockAngularQR() : m_analysisIsok(false), m_lastError(""), m_isQSorted(false), m_blockCols(1)
+		BlockAngularSparseQR() : m_analysisIsok(false), m_lastError(""), m_isQSorted(false), m_blockCols(1)
 		{ }
 
 		/** Construct a QR factorization of the matrix \a mat.
@@ -108,7 +108,7 @@ namespace Eigen {
 		*
 		* \sa compute()
 		*/
-		explicit SparseBlockAngularQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_isQSorted(false), m_blockCols(1)
+		explicit BlockAngularSparseQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_isQSorted(false), m_blockCols(1)
 		{
 			compute(mat);
 		}
@@ -162,9 +162,9 @@ namespace Eigen {
 
 		/** \returns the matrix Q
 		*/
-		SparseBlockAngularQRMatrixQReturnType<SparseBlockAngularQR> matrixQ() const
+		BlockAngularSparseQRMatrixQReturnType<BlockAngularSparseQR> matrixQ() const
 		{
-			return SparseBlockAngularQRMatrixQReturnType<SparseBlockAngularQR>(*this); // xxawf pass pointer not ref
+			return BlockAngularSparseQRMatrixQReturnType<BlockAngularSparseQR>(*this); // xxawf pass pointer not ref
 		}
 
 		/** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
@@ -230,18 +230,18 @@ namespace Eigen {
 		* \sa compute()
 		*/
 		template<typename Rhs>
-		inline const Solve<SparseBlockAngularQR, Rhs> solve(const MatrixBase<Rhs>& B) const
+		inline const Solve<BlockAngularSparseQR, Rhs> solve(const MatrixBase<Rhs>& B) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
 			eigen_assert(this->rows() == B.rows() && "SparseQR::solve() : invalid number of rows in the right hand side matrix");
-			return Solve<SparseBlockAngularQR, Rhs>(*this, B.derived());
+			return Solve<BlockAngularSparseQR, Rhs>(*this, B.derived());
 		}
 		template<typename Rhs>
-		inline const Solve<SparseBlockAngularQR, Rhs> solve(const SparseMatrixBase<Rhs>& B) const
+		inline const Solve<BlockAngularSparseQR, Rhs> solve(const SparseMatrixBase<Rhs>& B) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
 			eigen_assert(this->rows() == B.rows() && "SparseQR::solve() : invalid number of rows in the right hand side matrix");
-			return Solve<SparseBlockAngularQR, Rhs>(*this, B.derived());
+			return Solve<BlockAngularSparseQR, Rhs>(*this, B.derived());
 		}
 
 		/** \brief Reports whether previous computation was successful.
@@ -298,7 +298,7 @@ namespace Eigen {
 		BlockQRSolverLeft m_leftSolver;
 		BlockQRSolverRight m_rightSolver;
 
-		template <typename, typename > friend struct SparseBlockAngularQR_QProduct;
+		template <typename, typename > friend struct BlockAngularSparseQR_QProduct;
 
 	};
 
@@ -312,7 +312,7 @@ namespace Eigen {
 	* \note In this step it is assumed that there is no empty row in the matrix \a mat.
 	*/
 	template <typename MatrixType, typename BlockQRSolverLeft, typename BlockQRSolverRight>
-	void SparseBlockAngularQR<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::analyzePattern(const MatrixType& mat)
+	void BlockAngularSparseQR<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::analyzePattern(const MatrixType& mat)
 	{
 		eigen_assert(mat.isCompressed() && "SparseQR requires a sparse matrix in compressed mode. Call .makeCompressed() before passing it to SparseQR");
 
@@ -333,7 +333,7 @@ namespace Eigen {
 	* \param mat The sparse column-major matrix
 	*/
 	template <typename MatrixType, typename BlockQRSolverLeft, typename BlockQRSolverRight>
-	void SparseBlockAngularQR<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::factorize(const MatrixType& mat)
+	void BlockAngularSparseQR<MatrixType, BlockQRSolverLeft, BlockQRSolverRight>::factorize(const MatrixType& mat)
 	{
 		typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
 		typedef MatrixType::Index Index;
@@ -441,13 +441,13 @@ namespace Eigen {
 	}
 
 	template <typename SparseQRType, typename Derived>
-	struct SparseBlockAngularQR_QProduct : ReturnByValue<SparseBlockAngularQR_QProduct<SparseQRType, Derived> >
+	struct BlockAngularSparseQR_QProduct : ReturnByValue<BlockAngularSparseQR_QProduct<SparseQRType, Derived> >
 	{
 		typedef typename SparseQRType::MatrixQType MatrixType;
 		typedef typename SparseQRType::Scalar Scalar;
 
 		// Get the references 
-		SparseBlockAngularQR_QProduct(const SparseQRType& qr, const Derived& other, bool transpose) :
+		BlockAngularSparseQR_QProduct(const SparseQRType& qr, const Derived& other, bool transpose) :
 			m_qr(qr), m_other(other), m_transpose(transpose) {}
 
 		inline Index rows() const { return m_transpose ? m_qr.rows() : m_qr.cols(); }
@@ -502,7 +502,7 @@ namespace Eigen {
 	};
 
 	template<typename SparseQRType>
-	struct SparseBlockAngularQRMatrixQReturnType : public EigenBase<SparseBlockAngularQRMatrixQReturnType<SparseQRType> >
+	struct BlockAngularSparseQRMatrixQReturnType : public EigenBase<BlockAngularSparseQRMatrixQReturnType<SparseQRType> >
 	{
 		typedef typename SparseQRType::Scalar Scalar;
 		typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
@@ -510,45 +510,45 @@ namespace Eigen {
 			RowsAtCompileTime = Dynamic,
 			ColsAtCompileTime = Dynamic
 		};
-		explicit SparseBlockAngularQRMatrixQReturnType(const SparseQRType& qr) : m_qr(qr) {}
+		explicit BlockAngularSparseQRMatrixQReturnType(const SparseQRType& qr) : m_qr(qr) {}
 		template<typename Derived>
-		SparseBlockAngularQR_QProduct<SparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
+		BlockAngularSparseQR_QProduct<SparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
 		{
-			return SparseBlockAngularQR_QProduct<SparseQRType, Derived>(m_qr, other.derived(), false);
+			return BlockAngularSparseQR_QProduct<SparseQRType, Derived>(m_qr, other.derived(), false);
 		}
 		template<typename _Scalar, int _Options, typename _Index>
-		SparseBlockAngularQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
+		BlockAngularSparseQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
 		{
-			return SparseBlockAngularQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, false);
+			return BlockAngularSparseQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, false);
 		}
-		SparseBlockAngularQRMatrixQTransposeReturnType<SparseQRType> adjoint() const
+		BlockAngularSparseQRMatrixQTransposeReturnType<SparseQRType> adjoint() const
 		{
-			return SparseBlockAngularQRMatrixQTransposeReturnType<SparseQRType>(m_qr);
+			return BlockAngularSparseQRMatrixQTransposeReturnType<SparseQRType>(m_qr);
 		}
 		inline Index rows() const { return m_qr.rows(); }
 		inline Index cols() const { return m_qr.rows(); }
 		// To use for operations with the transpose of Q
-		SparseBlockAngularQRMatrixQTransposeReturnType<SparseQRType> transpose() const
+		BlockAngularSparseQRMatrixQTransposeReturnType<SparseQRType> transpose() const
 		{
-			return SparseBlockAngularQRMatrixQTransposeReturnType<SparseQRType>(m_qr);
+			return BlockAngularSparseQRMatrixQTransposeReturnType<SparseQRType>(m_qr);
 		}
 
 		const SparseQRType& m_qr;
 	};
 
 	template<typename SparseQRType>
-	struct SparseBlockAngularQRMatrixQTransposeReturnType
+	struct BlockAngularSparseQRMatrixQTransposeReturnType
 	{
-		explicit SparseBlockAngularQRMatrixQTransposeReturnType(const SparseQRType& qr) : m_qr(qr) {}
+		explicit BlockAngularSparseQRMatrixQTransposeReturnType(const SparseQRType& qr) : m_qr(qr) {}
 		template<typename Derived>
-		SparseBlockAngularQR_QProduct<SparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
+		BlockAngularSparseQR_QProduct<SparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
 		{
-			return SparseBlockAngularQR_QProduct<SparseQRType, Derived>(m_qr, other.derived(), true);
+			return BlockAngularSparseQR_QProduct<SparseQRType, Derived>(m_qr, other.derived(), true);
 		}
 		template<typename _Scalar, int _Options, typename _Index>
-		SparseBlockAngularQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
+		BlockAngularSparseQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
 		{
-			return SparseBlockAngularQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, true);
+			return BlockAngularSparseQR_QProduct<SparseQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, true);
 		}
 		const SparseQRType& m_qr;
 	};
@@ -556,7 +556,7 @@ namespace Eigen {
 	namespace internal {
 
 		template<typename SparseQRType>
-		struct evaluator_traits<SparseBlockAngularQRMatrixQReturnType<SparseQRType> >
+		struct evaluator_traits<BlockAngularSparseQRMatrixQReturnType<SparseQRType> >
 		{
 			typedef typename SparseQRType::MatrixType MatrixType;
 			typedef typename storage_kind_to_evaluator_kind<typename MatrixType::StorageKind>::Kind Kind;
@@ -564,9 +564,9 @@ namespace Eigen {
 		};
 
 		template< typename DstXprType, typename SparseQRType>
-		struct Assignment<DstXprType, SparseBlockAngularQRMatrixQReturnType<SparseQRType>, internal::assign_op<typename DstXprType::Scalar, typename SparseBlockAngularQRMatrixQReturnType<SparseQRType>::Scalar>, Sparse2Sparse>
+		struct Assignment<DstXprType, BlockAngularSparseQRMatrixQReturnType<SparseQRType>, internal::assign_op<typename DstXprType::Scalar, typename BlockAngularSparseQRMatrixQReturnType<SparseQRType>::Scalar>, Sparse2Sparse>
 		{
-			typedef SparseBlockAngularQRMatrixQReturnType<SparseQRType> SrcXprType;
+			typedef BlockAngularSparseQRMatrixQReturnType<SparseQRType> SrcXprType;
 			typedef typename DstXprType::Scalar Scalar;
 			typedef typename DstXprType::StorageIndex StorageIndex;
 			static void run(DstXprType &dst, const SrcXprType &src, const internal::assign_op<Scalar, typename SrcXprType::Scalar> &/*func*/)
@@ -575,14 +575,14 @@ namespace Eigen {
 				idMat.setIdentity();
 				// Sort the sparse householder reflectors if needed
 				const_cast<SparseQRType *>(&src.m_qr)->_sort_matrix_Q();
-				dst = SparseBlockAngularQR_QProduct<SparseQRType, DstXprType>(src.m_qr, idMat, false);
+				dst = BlockAngularSparseQR_QProduct<SparseQRType, DstXprType>(src.m_qr, idMat, false);
 			}
 		};
 
 		template< typename DstXprType, typename SparseQRType>
-		struct Assignment<DstXprType, SparseBlockAngularQRMatrixQReturnType<SparseQRType>, internal::assign_op<typename DstXprType::Scalar, typename SparseBlockAngularQRMatrixQReturnType<SparseQRType>::Scalar>, Sparse2Dense>
+		struct Assignment<DstXprType, BlockAngularSparseQRMatrixQReturnType<SparseQRType>, internal::assign_op<typename DstXprType::Scalar, typename BlockAngularSparseQRMatrixQReturnType<SparseQRType>::Scalar>, Sparse2Dense>
 		{
-			typedef SparseBlockAngularQRMatrixQReturnType<SparseQRType> SrcXprType;
+			typedef BlockAngularSparseQRMatrixQReturnType<SparseQRType> SrcXprType;
 			typedef typename DstXprType::Scalar Scalar;
 			typedef typename DstXprType::StorageIndex StorageIndex;
 			static void run(DstXprType &dst, const SrcXprType &src, const internal::assign_op<Scalar, typename SrcXprType::Scalar> &/*func*/)

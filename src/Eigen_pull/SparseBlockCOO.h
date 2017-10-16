@@ -2,6 +2,7 @@
 // for linear algebra.
 //
 // Copyright (C) 2017 Jan Svoboda <jan.svoboda@usi.ch>
+// Copyright (C) 2016 Andrew Fitzgibbon <awf@microsoft.com>
 //
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed

@@ -2,12 +2,13 @@
 // for linear algebra.
 //
 // Copyright (C) 2017 Jan Svoboda <jan.svoboda@usi.ch>
+// Copyright (C) 2016 Andrew Fitzgibbon <awf@microsoft.com>
 //
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#ifndef EIGEN_SPARSE_BANDED_BLOCKED_QR_H
+#ifndef EIGEN_BANDED_BLOCKED_SPARSE_QR_H
 #define EIGEN_SPARSE_BANDED_BLOCKED_QR_H
 
 #include <ctime>
@@ -18,16 +19,16 @@
 
 namespace Eigen {
 
-	template<typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading> class SparseBandedBlockedQR;
-	template<typename SparseBandedBlockedQRType> struct SparseBandedBlockedQRMatrixQReturnType;
-	template<typename SparseBandedBlockedQRType> struct SparseBandedBlockedQRMatrixQTransposeReturnType;
-	template<typename SparseBandedBlockedQRType, typename Derived> struct SparseBandedBlockedQR_QProduct;
+	template<typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading> class BandedBlockedSparseQR;
+	template<typename BandedBlockedSparseQRType> struct BandedBlockedSparseQRMatrixQReturnType;
+	template<typename BandedBlockedSparseQRType> struct BandedBlockedSparseQRMatrixQTransposeReturnType;
+	template<typename BandedBlockedSparseQRType, typename Derived> struct BandedBlockedSparseQR_QProduct;
 	namespace internal {
 
-		// traits<SparseBandedBlockedQRMatrixQ[Transpose]>
-		template <typename SparseBandedBlockedQRType> struct traits<SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType> >
+		// traits<BandedBlockedSparseQRMatrixQ[Transpose]>
+		template <typename BandedBlockedSparseQRType> struct traits<BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType> >
 		{
-			typedef typename SparseBandedBlockedQRType::MatrixType ReturnType;
+			typedef typename BandedBlockedSparseQRType::MatrixType ReturnType;
 			typedef typename ReturnType::StorageIndex StorageIndex;
 			typedef typename ReturnType::StorageKind StorageKind;
 			enum {
@@ -36,29 +37,29 @@ namespace Eigen {
 			};
 		};
 
-		template <typename SparseBandedBlockedQRType> struct traits<SparseBandedBlockedQRMatrixQTransposeReturnType<SparseBandedBlockedQRType> >
+		template <typename BandedBlockedSparseQRType> struct traits<BandedBlockedSparseQRMatrixQTransposeReturnType<BandedBlockedSparseQRType> >
 		{
-			typedef typename SparseBandedBlockedQRType::MatrixType ReturnType;
+			typedef typename BandedBlockedSparseQRType::MatrixType ReturnType;
 		};
 
-		template <typename SparseBandedBlockedQRType, typename Derived> struct traits<SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived> >
+		template <typename BandedBlockedSparseQRType, typename Derived> struct traits<BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived> >
 		{
 			typedef typename Derived::PlainObject ReturnType;
 		};
 
-		// SparseBandedBlockedQR_traits
-		template <typename T> struct SparseBandedBlockedQR_traits {  };
-		template <class T, int Rows, int Cols, int Options> struct SparseBandedBlockedQR_traits<Matrix<T, Rows, Cols, Options>> {
+		// BandedBlockedSparseQR_traits
+		template <typename T> struct BandedBlockedSparseQR_traits {  };
+		template <class T, int Rows, int Cols, int Options> struct BandedBlockedSparseQR_traits<Matrix<T, Rows, Cols, Options>> {
 			typedef Matrix<T, Rows, 1, Options> Vector;
 		};
-		template <class Scalar, int Options, typename Index> struct SparseBandedBlockedQR_traits<SparseMatrix<Scalar, Options, Index>> {
+		template <class Scalar, int Options, typename Index> struct BandedBlockedSparseQR_traits<SparseMatrix<Scalar, Options, Index>> {
 			typedef SparseVector<Scalar, Options> Vector;
 		};
 	} // End namespace internal
 
 	  /**
-	  * \ingroup SparseBandedBlockedQR_Module
-	  * \class SparseBandedBlockedQR
+	  * \ingroup BandedBlockedSparseQR_Module
+	  * \class BandedBlockedSparseQR
 	  * \brief Sparse Householder QR Factorization for banded matrices
 	  * This implementation is not rank revealing and uses Eigen::HouseholderQR for solving the dense blocks.
 	  *
@@ -79,10 +80,10 @@ namespace Eigen {
 	  *
 	  */
 	template<typename _MatrixType, typename _OrderingType, int _SuggestedBlockCols = 2, bool _MultiThreading = false>
-	class SparseBandedBlockedQR : public SparseSolverBase<SparseBandedBlockedQR<_MatrixType, _OrderingType, _SuggestedBlockCols, _MultiThreading> >
+	class BandedBlockedSparseQR : public SparseSolverBase<BandedBlockedSparseQR<_MatrixType, _OrderingType, _SuggestedBlockCols, _MultiThreading> >
 	{
 	protected:
-		typedef SparseSolverBase<SparseBandedBlockedQR<_MatrixType, _OrderingType, _SuggestedBlockCols, _MultiThreading> > Base;
+		typedef SparseSolverBase<BandedBlockedSparseQR<_MatrixType, _OrderingType, _SuggestedBlockCols, _MultiThreading> > Base;
 		using Base::m_isInitialized;
 	public:
 		using Base::_solve_impl;
@@ -94,7 +95,7 @@ namespace Eigen {
 		typedef Matrix<StorageIndex, Dynamic, 1> IndexVector;
 		typedef Matrix<Scalar, Dynamic, 1> ScalarVector;
 
-		typedef SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQR> MatrixQType;
+		typedef BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQR> MatrixQType;
 		typedef SparseMatrix<Scalar, ColMajor, StorageIndex> MatrixRType;
 		typedef PermutationMatrix<Dynamic, Dynamic, StorageIndex> PermutationType;
 
@@ -128,7 +129,7 @@ namespace Eigen {
 		};
 
 	public:
-		SparseBandedBlockedQR() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading), m_hasRowPermutation(false)
+		BandedBlockedSparseQR() : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading), m_hasRowPermutation(false)
 		{ }
 
 		/** Construct a QR factorization of the matrix \a mat.
@@ -137,7 +138,7 @@ namespace Eigen {
 		*
 		* \sa compute()
 		*/
-		explicit SparseBandedBlockedQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading), m_hasRowPermutation(false)
+		explicit BandedBlockedSparseQR(const MatrixType& mat) : m_analysisIsok(false), m_lastError(""), m_useDefaultThreshold(true), m_useMultiThreading(_MultiThreading), m_hasRowPermutation(false)
 		{
 			compute(mat);
 		}
@@ -211,16 +212,16 @@ namespace Eigen {
 		* To get a plain SparseMatrix representation of Q:
 		* \code
 		* SparseMatrix<double> Q;
-		* Q = SparseBandedBlockedQR<SparseMatrix<double> >(A).matrixQ();
+		* Q = BandedBlockedSparseQR<SparseMatrix<double> >(A).matrixQ();
 		* \endcode
 		* Internally, this call simply performs a sparse product between the matrix Q
 		* and a sparse identity matrix. However, due to the fact that the sparse
 		* reflectors are stored unsorted, two transpositions are needed to sort
 		* them before performing the product.
 		*/
-		SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQR> matrixQ() const
+		BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQR> matrixQ() const
 		{
-			return SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQR>(*this);
+			return BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQR>(*this);
 		}
 
 		/** \returns a const reference to the column permutation P that was applied to A such that A*P = Q*R
@@ -255,7 +256,7 @@ namespace Eigen {
 		bool _solve_impl(const MatrixBase<Rhs> &B, MatrixBase<Dest> &dest) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			eigen_assert(this->rows() == B.rows() && "SparseBandedBlockedQR::solve() : invalid number of rows in the right hand side matrix");
+			eigen_assert(this->rows() == B.rows() && "BandedBlockedSparseQR::solve() : invalid number of rows in the right hand side matrix");
 
 			Index rank = this->rank();
 
@@ -291,18 +292,18 @@ namespace Eigen {
 		* \sa compute()
 		*/
 		template<typename Rhs>
-		inline const Solve<SparseBandedBlockedQR, Rhs> solve(const MatrixBase<Rhs>& B) const
+		inline const Solve<BandedBlockedSparseQR, Rhs> solve(const MatrixBase<Rhs>& B) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			eigen_assert(this->rows() == B.rows() && "SparseBandedBlockedQR::solve() : invalid number of rows in the right hand side matrix");
-			return Solve<SparseBandedBlockedQR, Rhs>(*this, B.derived());
+			eigen_assert(this->rows() == B.rows() && "BandedBlockedSparseQR::solve() : invalid number of rows in the right hand side matrix");
+			return Solve<BandedBlockedSparseQR, Rhs>(*this, B.derived());
 		}
 		template<typename Rhs>
-		inline const Solve<SparseBandedBlockedQR, Rhs> solve(const SparseMatrixBase<Rhs>& B) const
+		inline const Solve<BandedBlockedSparseQR, Rhs> solve(const SparseMatrixBase<Rhs>& B) const
 		{
 			eigen_assert(m_isInitialized && "The factorization should be called first, use compute()");
-			eigen_assert(this->rows() == B.rows() && "SparseBandedBlockedQR::solve() : invalid number of rows in the right hand side matrix");
-			return Solve<SparseBandedBlockedQR, Rhs>(*this, B.derived());
+			eigen_assert(this->rows() == B.rows() && "BandedBlockedSparseQR::solve() : invalid number of rows in the right hand side matrix");
+			return Solve<BandedBlockedSparseQR, Rhs>(*this, B.derived());
 		}
 
 		/** \brief Reports whether previous computation was successful.
@@ -345,7 +346,7 @@ namespace Eigen {
 		BlockInfoMapOrder m_blockOrder; // Sparse matrix block order
 
 
-		template <typename, typename > friend struct SparseBandedBlockedQR_QProduct;
+		template <typename, typename > friend struct BandedBlockedSparseQR_QProduct;
 
 		void mergeBlocks(BlockInfoMapOrder &blockOrder, BlockInfoMap &blockMap, const StorageIndex maxColStep);
 	};
@@ -376,7 +377,7 @@ namespace Eigen {
 	 * in order to obtain better dense block sizes for the YTY representation.
 	 */
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
-	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::mergeBlocks(BlockInfoMapOrder &blockOrder, BlockInfoMap &blockMap, const StorageIndex maxColStep) {
+	void BandedBlockedSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::mergeBlocks(BlockInfoMapOrder &blockOrder, BlockInfoMap &blockMap, const StorageIndex maxColStep) {
 		BlockInfoMap newBlockMap;
 		BlockInfoMapOrder newBlockOrder;
 		MatrixBlockInfo firstBlock;
@@ -425,7 +426,7 @@ namespace Eigen {
 	}
 
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
-	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::setPattern(const StorageIndex matRows, const StorageIndex matCols, 
+	void BandedBlockedSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::setPattern(const StorageIndex matRows, const StorageIndex matCols, 
 		const StorageIndex blockRows, const StorageIndex blockCols, const StorageIndex blockOverlap) {
 		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
 		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
@@ -479,7 +480,7 @@ namespace Eigen {
 	* \note In this step it is assumed that there is no empty row in the matrix \a mat.
 	*/
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
-	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::analyzePattern(const MatrixType& mat)
+	void BandedBlockedSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::analyzePattern(const MatrixType& mat)
 	{
 		typedef RowRange<MatrixType::StorageIndex> MatrixRowRange;
 		typedef std::map<MatrixType::StorageIndex, MatrixType::StorageIndex> BlockBandSize;
@@ -576,13 +577,13 @@ namespace Eigen {
 
 	/** \brief Performs the numerical QR factorization of the input matrix
 	*
-	* The function SparseBandedBlockedQR::analyzePattern(const MatrixType&) must have been called beforehand with
+	* The function BandedBlockedSparseQR::analyzePattern(const MatrixType&) must have been called beforehand with
 	* a matrix having the same sparsity pattern than \a mat.
 	*
 	* \param mat The sparse column-major matrix
 	*/
 	template <typename MatrixType, typename OrderingType, int SuggestedBlockCols, bool MultiThreading>
-	void SparseBandedBlockedQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::factorize(const MatrixType& mat)
+	void BandedBlockedSparseQR<MatrixType, OrderingType, SuggestedBlockCols, MultiThreading>::factorize(const MatrixType& mat)
 	{
 		// Not rank-revealing, column permutation is identity
 		m_outputPerm_c.setIdentity(mat.cols());
@@ -682,19 +683,19 @@ namespace Eigen {
 	* General Householder product evaluation performing Q * A or Q.T * A.
 	* The general version is assuming that A is sparse and that the output will be sparse as well.
 	* Offers single-threaded and multi-threaded implementation.
-	* The choice of implementation depends on a template parameter of the SparseBandedBlockedQR class.
+	* The choice of implementation depends on a template parameter of the BandedBlockedSparseQR class.
 	* The single-threaded implementation cannot work in-place. It is implemented this way for performance related reasons.
 	*/
-	template <typename SparseBandedBlockedQRType, typename Derived>
-	struct SparseBandedBlockedQR_QProduct : ReturnByValue<SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived> >
+	template <typename BandedBlockedSparseQRType, typename Derived>
+	struct BandedBlockedSparseQR_QProduct : ReturnByValue<BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived> >
 	{
-		typedef typename SparseBandedBlockedQRType::MatrixType MatrixType;
-		typedef typename SparseBandedBlockedQRType::Scalar Scalar;
+		typedef typename BandedBlockedSparseQRType::MatrixType MatrixType;
+		typedef typename BandedBlockedSparseQRType::Scalar Scalar;
 
-		typedef typename internal::SparseBandedBlockedQR_traits<MatrixType>::Vector SparseVector;
+		typedef typename internal::BandedBlockedSparseQR_traits<MatrixType>::Vector SparseVector;
 
 		// Get the references 
-		SparseBandedBlockedQR_QProduct(const SparseBandedBlockedQRType& qr, const Derived& other, bool transpose) :
+		BandedBlockedSparseQR_QProduct(const BandedBlockedSparseQRType& qr, const Derived& other, bool transpose) :
 			m_qr(qr), m_other(other), m_transpose(transpose) {}
 		inline Index rows() const { return m_transpose ? m_qr.rows() : m_qr.cols(); }
 		inline Index cols() const { return m_other.cols(); }
@@ -884,7 +885,7 @@ namespace Eigen {
 
 		}
 
-		const SparseBandedBlockedQRType& m_qr;
+		const BandedBlockedSparseQRType& m_qr;
 		const Derived& m_other;
 		bool m_transpose;
 	};
@@ -894,14 +895,14 @@ namespace Eigen {
 	* for the case when A and the output are dense vectors.=
 	* Offers only single-threaded implementation as the overhead of multithreading would not bring any speedup for a dense vector (A is single column).
 	*/
-	template <typename SparseBandedBlockedQRType>
-	struct SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, VectorX> : ReturnByValue<SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, VectorX> >
+	template <typename BandedBlockedSparseQRType>
+	struct BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, VectorX> : ReturnByValue<BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, VectorX> >
 	{
-		typedef typename SparseBandedBlockedQRType::MatrixType MatrixType;
-		typedef typename SparseBandedBlockedQRType::Scalar Scalar;
+		typedef typename BandedBlockedSparseQRType::MatrixType MatrixType;
+		typedef typename BandedBlockedSparseQRType::Scalar Scalar;
 
 		// Get the references 
-		SparseBandedBlockedQR_QProduct(const SparseBandedBlockedQRType& qr, const VectorX& other, bool transpose) :
+		BandedBlockedSparseQR_QProduct(const BandedBlockedSparseQRType& qr, const VectorX& other, bool transpose) :
 			m_qr(qr), m_other(other), m_transpose(transpose) {}
 		inline Index rows() const { return m_transpose ? m_qr.rows() : m_qr.cols(); }
 		inline Index cols() const { return m_other.cols(); }
@@ -944,81 +945,81 @@ namespace Eigen {
 			}
 		}
 
-		const SparseBandedBlockedQRType& m_qr;
+		const BandedBlockedSparseQRType& m_qr;
 		const VectorX& m_other;
 		bool m_transpose;
 	};
 
-	template<typename SparseBandedBlockedQRType>
-	struct SparseBandedBlockedQRMatrixQReturnType : public EigenBase<SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType> >
+	template<typename BandedBlockedSparseQRType>
+	struct BandedBlockedSparseQRMatrixQReturnType : public EigenBase<BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType> >
 	{
-		typedef typename SparseBandedBlockedQRType::Scalar Scalar;
+		typedef typename BandedBlockedSparseQRType::Scalar Scalar;
 		typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
 		enum {
 			RowsAtCompileTime = Dynamic,
 			ColsAtCompileTime = Dynamic
 		};
-		explicit SparseBandedBlockedQRMatrixQReturnType(const SparseBandedBlockedQRType& qr) : m_qr(qr) {}
-		/*SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived> operator*(const MatrixBase<Derived>& other)
+		explicit BandedBlockedSparseQRMatrixQReturnType(const BandedBlockedSparseQRType& qr) : m_qr(qr) {}
+		/*BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
 		{
-		return SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType,Derived>(m_qr,other.derived(),false);
+		return BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType,Derived>(m_qr,other.derived(),false);
 		}*/
 		template<typename Derived>
-		SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived> operator*(const MatrixBase<Derived>& other)
+		BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
 		{
-			return SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived>(m_qr, other.derived(), false);
+			return BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived>(m_qr, other.derived(), false);
 		}
 		template<typename _Scalar, int _Options, typename _Index>
-		SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
+		BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
 		{
-			return SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, false);
+			return BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, false);
 		}
-		SparseBandedBlockedQRMatrixQTransposeReturnType<SparseBandedBlockedQRType> adjoint() const
+		BandedBlockedSparseQRMatrixQTransposeReturnType<BandedBlockedSparseQRType> adjoint() const
 		{
-			return SparseBandedBlockedQRMatrixQTransposeReturnType<SparseBandedBlockedQRType>(m_qr);
+			return BandedBlockedSparseQRMatrixQTransposeReturnType<BandedBlockedSparseQRType>(m_qr);
 		}
 		inline Index rows() const { return m_qr.rows(); }
 		inline Index cols() const { return m_qr.rows(); }
 		// To use for operations with the transpose of Q
-		SparseBandedBlockedQRMatrixQTransposeReturnType<SparseBandedBlockedQRType> transpose() const
+		BandedBlockedSparseQRMatrixQTransposeReturnType<BandedBlockedSparseQRType> transpose() const
 		{
-			return SparseBandedBlockedQRMatrixQTransposeReturnType<SparseBandedBlockedQRType>(m_qr);
+			return BandedBlockedSparseQRMatrixQTransposeReturnType<BandedBlockedSparseQRType>(m_qr);
 		}
 
-		const SparseBandedBlockedQRType& m_qr;
+		const BandedBlockedSparseQRType& m_qr;
 	};
 
-	template<typename SparseBandedBlockedQRType>
-	struct SparseBandedBlockedQRMatrixQTransposeReturnType
+	template<typename BandedBlockedSparseQRType>
+	struct BandedBlockedSparseQRMatrixQTransposeReturnType
 	{
-		explicit SparseBandedBlockedQRMatrixQTransposeReturnType(const SparseBandedBlockedQRType& qr) : m_qr(qr) {}
+		explicit BandedBlockedSparseQRMatrixQTransposeReturnType(const BandedBlockedSparseQRType& qr) : m_qr(qr) {}
 		template<typename Derived>
-		SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived> operator*(const MatrixBase<Derived>& other)
+		BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived> operator*(const MatrixBase<Derived>& other)
 		{
-			return SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, Derived>(m_qr, other.derived(), true);
+			return BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, Derived>(m_qr, other.derived(), true);
 		}
 		template<typename _Scalar, int _Options, typename _Index>
-		SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
+		BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, SparseMatrix<_Scalar, _Options, _Index>> operator*(const SparseMatrix<_Scalar, _Options, _Index>& other)
 		{
-			return SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, true);
+			return BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, SparseMatrix<_Scalar, _Options, _Index>>(m_qr, other, true);
 		}
-		const SparseBandedBlockedQRType& m_qr;
+		const BandedBlockedSparseQRType& m_qr;
 	};
 
 	namespace internal {
 
-		template<typename SparseBandedBlockedQRType>
-		struct evaluator_traits<SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType> >
+		template<typename BandedBlockedSparseQRType>
+		struct evaluator_traits<BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType> >
 		{
-			typedef typename SparseBandedBlockedQRType::MatrixType MatrixType;
+			typedef typename BandedBlockedSparseQRType::MatrixType MatrixType;
 			typedef typename storage_kind_to_evaluator_kind<typename MatrixType::StorageKind>::Kind Kind;
 			typedef SparseShape Shape;
 		};
 
-		template< typename DstXprType, typename SparseBandedBlockedQRType>
-		struct Assignment<DstXprType, SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType>, internal::assign_op<typename DstXprType::Scalar, typename DstXprType::Scalar>, Sparse2Sparse>
+		template< typename DstXprType, typename BandedBlockedSparseQRType>
+		struct Assignment<DstXprType, BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType>, internal::assign_op<typename DstXprType::Scalar, typename DstXprType::Scalar>, Sparse2Sparse>
 		{
-			typedef SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType> SrcXprType;
+			typedef BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType> SrcXprType;
 			typedef typename DstXprType::Scalar Scalar;
 			typedef typename DstXprType::StorageIndex StorageIndex;
 			static void run(DstXprType &dst, const SrcXprType &src, const internal::assign_op<Scalar, Scalar> &/*func*/)
@@ -1026,15 +1027,15 @@ namespace Eigen {
 				typename DstXprType::PlainObject idMat(src.m_qr.rows(), src.m_qr.rows());
 				idMat.setIdentity();
 				// Sort the sparse householder reflectors if needed
-				//const_cast<SparseBandedBlockedQRType *>(&src.m_qr)->_sort_matrix_Q();
-				dst = SparseBandedBlockedQR_QProduct<SparseBandedBlockedQRType, DstXprType>(src.m_qr, idMat, false);
+				//const_cast<BandedBlockedSparseQRType *>(&src.m_qr)->_sort_matrix_Q();
+				dst = BandedBlockedSparseQR_QProduct<BandedBlockedSparseQRType, DstXprType>(src.m_qr, idMat, false);
 			}
 		};
 
-		template< typename DstXprType, typename SparseBandedBlockedQRType>
-		struct Assignment<DstXprType, SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType>, internal::assign_op<typename DstXprType::Scalar, typename DstXprType::Scalar>, Sparse2Dense>
+		template< typename DstXprType, typename BandedBlockedSparseQRType>
+		struct Assignment<DstXprType, BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType>, internal::assign_op<typename DstXprType::Scalar, typename DstXprType::Scalar>, Sparse2Dense>
 		{
-			typedef SparseBandedBlockedQRMatrixQReturnType<SparseBandedBlockedQRType> SrcXprType;
+			typedef BandedBlockedSparseQRMatrixQReturnType<BandedBlockedSparseQRType> SrcXprType;
 			typedef typename DstXprType::Scalar Scalar;
 			typedef typename DstXprType::StorageIndex StorageIndex;
 			static void run(DstXprType &dst, const SrcXprType &src, const internal::assign_op<Scalar, Scalar> &/*func*/)

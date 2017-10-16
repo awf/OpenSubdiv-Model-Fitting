@@ -18,8 +18,8 @@
 #include <Eigen/src/CholmodSupport/CholmodSupport.h>
 #include <Eigen/src/SPQRSupport/SuiteSparseQRSupport.h>
 
-#include "Eigen_pull/SparseBandedBlockedQR.h"
-#include "Eigen_pull/SparseBlockAngularQR.h"
+#include "Eigen_pull/BandedBlockedSparseQR.h"
+#include "Eigen_pull/BlockAngularSparseQR.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -36,14 +36,14 @@ using namespace Eigen;
 typedef SparseMatrix<Scalar, ColMajor, SuiteSparse_long> JacobianType;
 typedef SparseMatrix<Scalar, RowMajor, int> JacobianTypeRowMajor;
 typedef Matrix<Scalar, Dynamic, Dynamic> MatrixType;
-typedef SparseBandedBlockedQR<JacobianType, NaturalOrdering<int>, 8, false> BandedBlockedQRSolver;
+typedef BandedBlockedSparseQR<JacobianType, NaturalOrdering<int>, 8, false> BandedBlockedQRSolver;
 
 // QR for J1 is banded blocked QR
 typedef BandedBlockedQRSolver LeftSuperBlockSolver;
 // QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 typedef ColPivHouseholderQR<MatrixType> RightSuperBlockSolver;
 // QR solver for sparse block angular matrix
-typedef SparseBlockAngularQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> BlockAngularQRSolver;
+typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> BlockAngularQRSolver;
 
 typedef ColPivHouseholderQR<Matrix<Scalar, 7, 2> > DenseQRSolver7x2;
 typedef BlockDiagonalSparseQR<JacobianType, DenseQRSolver7x2> BlockDiagonalQRSolver;
@@ -364,7 +364,6 @@ int main() {
 	std::cout << "||targetX  - X||_2 = " << (slvrXDense - solvedBackperm).norm() << std::endl;
 	//std::cout << "||Q.T  * Q - I||_2 = " << (slvrQ.transpose() * slvrQ - I).norm() << std::endl;
 	std::cout << "####################################################" << std::endl;
-
 
 
 

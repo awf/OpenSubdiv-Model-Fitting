@@ -18,8 +18,8 @@
 #include <Eigen/src/CholmodSupport/CholmodSupport.h>
 #include <Eigen/src/SPQRSupport/SuiteSparseQRSupport.h>
 
-#include "Eigen_pull/SparseBandedBlockedQR.h"
-#include "Eigen_pull/SparseBlockAngularQR.h"
+#include "Eigen_pull/BandedBlockedSparseQR.h"
+#include "Eigen_pull/BlockAngularSparseQR.h"
 
 #include <unsupported/Eigen/MatrixFunctions>
 //#include <unsupported/Eigen/LevenbergMarquardt>
@@ -151,7 +151,7 @@ struct SparseBlockDiagonalQR_EllipseFitting : public EllipseFitting<_Scalar> {
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<Matrix<Scalar, Dynamic, Dynamic> > RightSuperBlockSolver;
 	// QR for J is concatenation of the above.
-	typedef SparseBlockAngularQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
+	typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> SchurlikeQRSolver;
 
 	typedef SchurlikeQRSolver QRSolver;
 
@@ -171,13 +171,13 @@ struct SparseBlockDiagonalQR_EllipseFitting : public EllipseFitting<_Scalar> {
 
 template <typename _Scalar>
 struct SparseBlockBandedQR_EllipseFitting : public EllipseFitting<_Scalar> {
-	typedef SparseBandedBlockedQR<JacobianType, NaturalOrdering<int>, 8, false> BandedBlockedQRSolver;
+	typedef BandedBlockedSparseQR<JacobianType, NaturalOrdering<int>, 8, false> BandedBlockedQRSolver;
 	// QR for J1 is banded blocked QR
 	typedef BandedBlockedQRSolver LeftSuperBlockSolver;
 	// QR for J1'J2 is general dense (faster than general sparse by about 1.5x for n=500K)
 	typedef ColPivHouseholderQR<MatrixType> RightSuperBlockSolver;
 	// QR solver for sparse block angular matrix
-	typedef SparseBlockAngularQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> BlockAngularQRSolver;
+	typedef BlockAngularSparseQR<JacobianType, LeftSuperBlockSolver, RightSuperBlockSolver> BlockAngularQRSolver;
 
 	typedef BlockAngularQRSolver QRSolver;
 
